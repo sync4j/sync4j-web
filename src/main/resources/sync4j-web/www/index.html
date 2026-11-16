@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synchronization Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        #app-content {
+            display: none; /* Hidden by default until authentication */
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="app-content" style="display: none;">
+        <a href="#" class="logout-button" id="logout-button">Logout</a>
+        <header>
+            <h1>Synchronization Dashboard</h1>
+        </header>
+
+        <main>
+            <div class="sync-form">
+                <div class="form-group">
+                    <label for="librarySelect">Select Library:</label>
+                    <div class="library-select-container">
+                        <select id="librarySelect">
+                            <option value="">Loading libraries...</option>
+                        </select>
+                        <div id="libraryStatus" class="library-status">
+                            <span class="status-indicator" id="statusIndicator"></span>
+                            <span id="lastSyncTime" class="last-sync"></span>
+                        </div>
+                    </div>
+                    <div id="errorMessage" class="error-message"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="suffixPath">Suffix Path (optional):</label>
+                    <input type="text" id="suffixPath" placeholder="e.g., subfolder/path">
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="useChecksum">
+                        Use Checksum Verification
+                    </label>
+                </div>
+
+                <div class="form-actions">
+                    <button id="startBtn" class="btn btn-primary">Start Synchronization</button>
+                    <button id="stopBtn" class="btn btn-danger" disabled>Stop Synchronization</button>
+                </div>
+            </div>
+
+            <div class="progress-section" style="display: none;">
+                <div class="progress-header">
+                    <h2>Synchronization Progress</h2>
+                    <button id="toggleProgressSection" class="toggle-button" title="Collapse/Expand">
+                        <span class="arrow"></span>
+                    </button>
+                </div>
+                
+                <div class="progress-content">
+                    <!-- Progress blocks will be added here by JavaScript -->
+                </div>
+
+                <div class="status-section">
+                    <div id="statusMessage" class="status-message"></div>
+                    <div id="logOutput" class="log-output"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/auth.js"></script>
+    <script type="module" src="script.js">
+        // Logout button handling
+        document.addEventListener('DOMContentLoaded', () => {
+            const logoutButton = document.getElementById('logout-button');
+            if (logoutButton) {
+                logoutButton.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (window.authManager) {
+                        window.authManager.logout();
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
