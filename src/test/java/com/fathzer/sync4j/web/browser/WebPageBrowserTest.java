@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -22,6 +23,8 @@ import com.fathzer.sync4j.config.ProviderRegistry;
 import com.fathzer.sync4j.web.SyncServer;
 import com.fathzer.sync4j.web.config.ConfigLoader;
 import com.fathzer.sync4j.web.config.SyncWebConfig;
+import com.fathzer.sync4j.config.Library;
+import com.fathzer.sync4j.web.plugin.SyncPlugin;
 import com.fathzer.sync4j.web.security.AuthenticationFailedException;
 import com.fathzer.sync4j.web.security.SecretGenerator;
 
@@ -43,6 +46,7 @@ class WebPageBrowserTest {
     private Path destination;
     private SyncServer server;
     private String base;
+    private final AtomicReference<List<String>> libraryWarnings = new AtomicReference<>(List.of());
 
     @BeforeAll
     static void startBrowser() throws IOException, InterruptedException {
@@ -79,6 +83,16 @@ class WebPageBrowserTest {
                 return user;
             }
             throw new AuthenticationFailedException(401, "Bad credentials", null);
+        }).plugin(new SyncPlugin() {
+            @Override
+            public String id() {
+                return "checker";
+            }
+
+            @Override
+            public List<String> check(Library library) {
+                return libraryWarnings.get();
+            }
         }).statusFile(tmp.resolve("statuses.json")).build();
         server.start(0);
         base = "http://localhost:" + server.port();
@@ -110,7 +124,11 @@ class WebPageBrowserTest {
     }
 
     private void selectTheLibrary() {
-        browser.evaluate("const s = document.getElementById('librarySelect'); s.value = 'photos'; s.dispatchEvent(new Event('change'));");
+        selectLibrary("photos");
+    }
+
+    private void selectLibrary(String id) {
+        browser.evaluate("(() => { const s = document.getElementById('librarySelect'); s.value = '" + id + "'; s.dispatchEvent(new Event('change')); })()");
     }
 
     @Test
@@ -177,6 +195,47 @@ class WebPageBrowserTest {
         assertEquals("photo one", Files.readString(destination.resolve("a.jpg")));
         assertEquals("photo two", Files.readString(destination.resolve("b.jpg")));
         assertEquals(List.of(), browser.javascriptErrorsSince(mark));
+    }
+
+    @Test
+    void testTheWarningsOfThePluginsAreDisplayedAndCanBeChecked() {
+        libraryWarnings.set(List.of("The library is not ready", "Something else"));
+        open();
+        loginAndWaitForTheLibraries();
+        final int mark = browser.mark();
+        // Nothing to say as long as no library is selected
+        assertFalse(browser.isTrue(visible("libraryWarnings")));
+
+        selectTheLibrary();
+
+        browser.waitFor(visible("libraryWarnings"), "the warnings");
+        assertEquals(List.of("The library is not ready", "Something else"), MAPPER.convertValue(browser.evaluate("Array.from(document.querySelectorAll('#libraryWarningsList li')).map(e => e.textContent)"), List.class));
+
+        // The problem is fixed: the user checks again
+        libraryWarnings.set(List.of());
+        browser.evaluate("document.getElementById('recheckBtn').click()");
+        browser.waitFor("!" + visible("libraryWarnings"), "the end of the warnings");
+
+        // Another problem, then the user selects no library any more
+        libraryWarnings.set(List.of("Again"));
+        selectLibrary("");
+        selectLibrary("photos");
+        browser.waitFor(visible("libraryWarnings"), "the new warning");
+        assertEquals("Again", browser.text("document.querySelector('#libraryWarningsList li').textContent"));
+        selectLibrary("");
+        browser.waitFor("!" + visible("libraryWarnings"), "the warnings to be hidden");
+        assertEquals(List.of(), browser.javascriptErrorsSince(mark));
+    }
+
+    @Test
+    void testNoWarningWhenThePluginsFindNoProblem() {
+        open();
+        final int mark = browser.mark();
+        loginAndWaitForTheLibraries();
+        selectTheLibrary();
+
+        browser.waitUntil(() -> browser.responsesSince(mark, base).contains("200 /api/libraries/checks/photos"), "the check of the library");
+        assertFalse(browser.isTrue(visible("libraryWarnings")));
     }
 
     @Test

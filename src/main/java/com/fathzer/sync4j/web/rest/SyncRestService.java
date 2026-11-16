@@ -1,17 +1,20 @@
 package com.fathzer.sync4j.web.rest;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fathzer.sync4j.config.Library;
+import com.fathzer.sync4j.web.plugin.LibraryWarning;
 import com.fathzer.sync4j.web.security.LoginManager;
 import com.fathzer.sync4j.web.sync.SyncRequest;
 import com.fathzer.sync4j.web.sync.SynchronizationManager;
 
-import io.javalin.Javalin;
+import io.javalin.config.RoutesConfig;
 import io.javalin.http.Context;
 
 /**
@@ -22,6 +25,7 @@ import io.javalin.http.Context;
  * <li>GET root/sync/{id}: the status of a library</li>
  * <li>POST root/sync/{id}: starts the synchronization of a library</li>
  * <li>DELETE root/sync/{id}: cancels the synchronization of a library</li>
+ * <li>GET root/checks/{id}: the problems that the plugins found in a library, as a list of <code>{"plugin":..., "message":...}</code></li>
  * </ul>
  * All these routes need the user to be logged in (if the security is enabled): the answer is a 401 otherwise.
  */
@@ -33,25 +37,44 @@ public class SyncRestService {
 
     private final SynchronizationManager manager;
     private final LoginManager loginManager;
+    private final Function<Library, List<LibraryWarning>> checker;
 
     private final Logger log = LoggerFactory.getLogger(SyncRestService.class);
 
-    public SyncRestService(SynchronizationManager manager, LoginManager loginManager) {
+    /**
+     * Constructor.
+     * @param manager the synchronization manager
+     * @param loginManager the login manager
+     * @param checker checks a library (it returns the problems found by the plugins)
+     */
+    public SyncRestService(SynchronizationManager manager, LoginManager loginManager, Function<Library, List<LibraryWarning>> checker) {
         this.manager = manager;
         this.loginManager = loginManager;
+        this.checker = checker;
     }
 
-    public void registerRoutes(Javalin app, String root) {
+    public void registerRoutes(RoutesConfig routes, String root) {
         // Nothing that is under the root can be used without being logged in
-        app.before(root, this::verify);
-        app.before(root + "/*", this::verify);
-        app.get(root, this::getLibraries);
+        routes.before(root, this::verify);
+        routes.before(root + "/*", this::verify);
+        routes.get(root, this::getLibraries);
         final String syncPath = root + "/sync";
-        app.get(syncPath, this::getAllSyncStatus);
+        routes.get(syncPath, this::getAllSyncStatus);
         final String syncLibraryPath = syncPath + "/{" + LIBRARY_ID_KEY + "}";
-        app.post(syncLibraryPath, this::startSync);
-        app.delete(syncLibraryPath, this::stopSync);
-        app.get(syncLibraryPath, this::getSyncStatus);
+        routes.post(syncLibraryPath, this::startSync);
+        routes.delete(syncLibraryPath, this::stopSync);
+        routes.get(syncLibraryPath, this::getSyncStatus);
+        routes.get(root + "/checks/{" + LIBRARY_ID_KEY + "}", this::checkLibrary);
+    }
+
+    private void checkLibrary(Context ctx) {
+        final String libraryId = ctx.pathParam(LIBRARY_ID_KEY);
+        final Optional<Library> library = manager.getLibraries().stream().filter(lib -> lib.id().equals(libraryId)).findFirst();
+        if (library.isEmpty()) {
+            ctx.status(404).json(Map.of(ERROR_KEY, "Library not found: " + libraryId));
+        } else {
+            ctx.json(checker.apply(library.get()));
+        }
     }
 
     private void getLibraries(Context ctx) {

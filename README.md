@@ -84,7 +84,13 @@ public class MyPlugin implements SyncPlugin {
 
     public void init(PluginContext context) throws IOException {
         // context.config(): the configuration of the plugin
-        // context.app(): the Javalin app, to register routes (context.loginManager() protects them)
+        // context.routes(): the routes of the Javalin app, to register the ones of the plugin (only here: Javalin needs them before the server starts).
+        // context.loginManager() protects them
+    }
+
+    public List<String> check(Library library) throws IOException {
+        // The problems found in the library (an empty list if there is none), displayed to the user
+        return List.of();
     }
 
     public void beforeSync(SyncRequest request) throws IOException {
@@ -98,6 +104,7 @@ public class MyPlugin implements SyncPlugin {
 }
 ```
 
+- `check(library)` lets a plugin tell that it can't do its job for a library (for instance, because a server it uses does not know the library). The web page asks it when the user selects a library, displays the problems in a box and offers to check again (the plugin is asked each time, so the result should not be cached for long and it should return quickly). If it throws an `IOException`, the message is displayed as a problem. These problems only inform the user: a plugin that wants to prevent a synchronization has to refuse it in `beforeSync`.
 - `SyncServer.Builder.plugin(plugin)` always activates a plugin.
 - A plugin can also be provided by a `SyncPluginFactory` that is discovered (see below). It is activated only if the configuration has a section for its id. A section that no plugin uses is reported in the log (it can be a typo or a plugin that could not be loaded).
 - `PluginContext.publish(libraryId, data)` sends `{"type":"PLUGIN","plugin":"id","library":"libraryId","data":...}` to the clients that watch the library. The web page displays `data.message` in its log and `data.progress` (`{"done":1,"total":2}`) as a progress bar titled `data.label`.
@@ -149,6 +156,7 @@ See also `secureCookie` in the configuration: it is about the cookie that carrie
 | GET | `/api/libraries/sync/{id}` | The status of a library |
 | POST | `/api/libraries/sync/{id}` | Starts a synchronization. Body: `{"suffixPath": "optional/sub/folder", "useChecksum": false}` |
 | DELETE | `/api/libraries/sync/{id}` | Cancels a synchronization |
+| GET | `/api/libraries/checks/{id}` | The problems found by the plugins in a library: `[{"plugin": "id", "message": "..."}]` (empty if none) |
 | WS | `/ws/sync/{libraryId}` | `STATUS`, `PROGRESS` and `PLUGIN` messages |
 | POST/GET/DELETE | `/api/login` | Log in (`{"user", "password"}`), check the login (`{"user"}` or 401), log out. The only routes of the API that don't need a login |
 

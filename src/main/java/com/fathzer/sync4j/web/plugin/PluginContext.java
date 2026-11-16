@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fathzer.sync4j.config.Library;
 import com.fathzer.sync4j.web.security.LoginManager;
 
-import io.javalin.Javalin;
+import io.javalin.config.RoutesConfig;
 
 /**
  * What a plugin can use to interact with the server.
@@ -25,11 +25,11 @@ public interface PluginContext {
     List<Library> libraries();
 
     /**
-     * Gets the Javalin application, to register routes.
-     * <br>Routes can only be registered during {@link SyncPlugin#init(PluginContext)}.
-     * @return the application
+     * Gets the routes of the Javalin application, to register the ones of the plugin (<code>routes().get("/api/plugins/id/hello", ctx -> ...)</code>).
+     * <br>Javalin needs the routes to be registered before the server starts: they can only be registered during {@link SyncPlugin#init(PluginContext)}.
+     * @return the routes configuration
      */
-    Javalin app();
+    RoutesConfig routes();
 
     /**
      * Gets the login manager, to protect the routes registered by the plugin (see {@link LoginManager#checkLogin(io.javalin.http.Context)}).

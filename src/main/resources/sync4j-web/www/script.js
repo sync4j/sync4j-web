@@ -32,6 +32,7 @@ class SynchronizationUI {
         this.currentLibrary = null;
         this.isRunning = false;
         this.syncForm.clearError();
+        this.syncForm.clearWarnings();
     }
 
     // Initialize the component asynchronously
@@ -66,6 +67,7 @@ class SynchronizationUI {
             this.reconnectAttempts = 0;
             this.connectWebSocket();
             this.syncForm.saveState();
+            this.syncForm.checkLibrary(libraryId);
         }
     }
 
@@ -288,6 +290,7 @@ class SynchronizationUI {
     resetUI() {
         this.isRunning = false;
         this.syncForm.reset();
+        this.syncForm.clearWarnings();
         this.syncProgress.resetStatusIndicators();
     }
     

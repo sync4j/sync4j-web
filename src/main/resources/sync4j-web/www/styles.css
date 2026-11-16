@@ -97,6 +97,26 @@ header h1 {
     min-height: 1.2em;
 }
 
+.library-warnings {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: #fff6e0;
+    border: 1px solid #f0c36d;
+    border-radius: 4px;
+    color: #7a5200;
+    font-size: 0.9em;
+}
+
+.library-warnings ul {
+    margin: 0 0 8px 0;
+    padding-left: 20px;
+}
+
+.library-warnings .btn {
+    padding: 4px 10px;
+    font-size: 0.9em;
+}
+
 @keyframes pulse {
     0% { opacity: 0.6; }
     50% { opacity: 1; }
@@ -168,6 +188,15 @@ header h1 {
     background-color: #c0392b;
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(231, 76, 60, 0.3);
+}
+
+.btn-secondary {
+    background-color: #f39c12;
+    color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background-color: #d68910;
 }
 
 .btn:disabled {

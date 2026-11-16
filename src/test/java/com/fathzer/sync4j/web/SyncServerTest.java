@@ -59,6 +59,8 @@ class SyncServerTest {
         private final AtomicBoolean closed = new AtomicBoolean();
         private volatile PluginContext context;
         private volatile String refusal;
+        private volatile List<String> warnings = List.of();
+        private volatile IOException checkFailure;
 
         @Override
         public String id() {
@@ -66,10 +68,19 @@ class SyncServerTest {
         }
 
         @Override
+        public List<String> check(com.fathzer.sync4j.config.Library library) throws IOException {
+            calls.add("check " + library.id());
+            if (checkFailure != null) {
+                throw checkFailure;
+            }
+            return warnings;
+        }
+
+        @Override
         public void init(PluginContext context) {
             this.context = context;
             // A route protected by the login manager of the server
-            context.app().get("/api/plugins/test/hello", ctx -> {
+            context.routes().get("/api/plugins/test/hello", ctx -> {
                 final var login = context.loginManager().checkLogin(ctx);
                 if (login.error() != null) {
                     ctx.status(401).json(Map.of("error", login.error()));
@@ -391,6 +402,43 @@ class SyncServerTest {
         assertTrue(MAPPER.readTree(response.body()).get("error").asText().contains("The photo server is not available"));
         assertEquals(List.of("before photos"), plugin.calls);
         assertFalse(Files.exists(destination.resolve("a.txt")));
+    }
+
+    @Test
+    void testPluginsCheckTheLibrary() throws Exception {
+        start(config(false, ""));
+
+        // No problem
+        HttpResponse<String> response = send("GET", "/api/libraries/checks/photos", null, null);
+        assertEquals(200, response.statusCode());
+        assertEquals("[]", response.body());
+
+        // The problems of the plugin are returned, and the plugin is asked each time (the user can check again after fixing the problem)
+        plugin.warnings = List.of("Not ready", "Not ready either");
+        JsonNode warnings = MAPPER.readTree(send("GET", "/api/libraries/checks/photos", null, null).body());
+        assertEquals(2, warnings.size());
+        assertEquals("test", warnings.get(0).get("plugin").asText());
+        assertEquals("Not ready", warnings.get(0).get("message").asText());
+        plugin.warnings = List.of();
+        assertEquals("[]", send("GET", "/api/libraries/checks/photos", null, null).body());
+        assertEquals(List.of("check photos", "check photos", "check photos"), plugin.calls);
+
+        // A plugin that can't do its check reports it as a problem
+        plugin.checkFailure = new IOException("The photo server is not available");
+        warnings = MAPPER.readTree(send("GET", "/api/libraries/checks/photos", null, null).body());
+        assertEquals(1, warnings.size());
+        assertTrue(warnings.get(0).get("message").asText().contains("The photo server is not available"));
+
+        assertEquals(404, send("GET", "/api/libraries/checks/unknown", null, null).statusCode());
+    }
+
+    @Test
+    void testChecksNeedTheLogin() throws Exception {
+        start(config(true, ""));
+
+        assertEquals(401, send("GET", "/api/libraries/checks/photos", null, null).statusCode());
+        assertEquals(200, send("GET", "/api/libraries/checks/photos", null, login()).statusCode());
+        assertEquals(List.of("check photos"), plugin.calls);
     }
 
     @Test

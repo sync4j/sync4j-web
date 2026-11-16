@@ -17,6 +17,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.MissingNode;
 import com.fathzer.sync4j.config.Library;
 import com.fathzer.sync4j.web.config.SyncWebConfig;
+import com.fathzer.sync4j.web.plugin.LibraryWarning;
 import com.fathzer.sync4j.web.plugin.PluginContext;
 import com.fathzer.sync4j.config.PluginDiscovery;
 import com.fathzer.sync4j.web.plugin.SyncPlugin;
@@ -34,6 +35,7 @@ import com.fathzer.sync4j.web.sync.SynchronizationManager;
 import com.fathzer.sync4j.web.ws.SyncWsService;
 
 import io.javalin.Javalin;
+import io.javalin.config.RoutesConfig;
 import io.javalin.http.UnauthorizedResponse;
 import io.javalin.http.staticfiles.Location;
 import io.javalin.json.JavalinJackson;
@@ -176,9 +178,11 @@ public class SyncServer implements AutoCloseable {
     private class Context implements PluginContext {
         private final String pluginId;
         private final JsonNode pluginConfig;
+        private final RoutesConfig routes;
 
-        Context(String pluginId, JsonNode pluginConfig) {
+        Context(String pluginId, JsonNode pluginConfig, RoutesConfig routes) {
             this.pluginId = pluginId;
+            this.routes = routes;
             this.pluginConfig = pluginConfig == null ? MissingNode.getInstance() : pluginConfig;
         }
 
@@ -193,8 +197,8 @@ public class SyncServer implements AutoCloseable {
         }
 
         @Override
-        public Javalin app() {
-            return app;
+        public RoutesConfig routes() {
+            return routes;
         }
 
         @Override
@@ -248,18 +252,21 @@ public class SyncServer implements AutoCloseable {
         this.manager = new SynchronizationManager(config.synchronization(), builder.statusFile);
         this.wsService = new SyncWsService(manager);
         manager.setBroadcaster(wsService);
-        this.app = createApp(builder);
-        try {
-            registerRoutes();
-            initPlugins(builder);
-        } catch (IOException | RuntimeException e) {
+        // Javalin needs the routes to be registered when the application is created, the plugins are initialized at the same time
+        final List<Exception> failures = new ArrayList<>();
+        this.app = createApp(builder, failures);
+        if (!failures.isEmpty()) {
             close();
-            throw e;
+            final Exception failure = failures.get(0);
+            if (failure instanceof IOException e) {
+                throw e;
+            }
+            throw (RuntimeException) failure;
         }
         manager.setListener(new PluginsListener());
     }
 
-    private Javalin createApp(Builder builder) {
+    private Javalin createApp(Builder builder, List<Exception> failures) {
         return Javalin.create(conf -> {
             conf.jsonMapper(new JavalinJackson().updateMapper(mapper -> mapper.registerModule(StatisticsSerializer.getModule())));
             if (builder.staticFiles != null) {
@@ -268,25 +275,31 @@ public class SyncServer implements AutoCloseable {
             }
             conf.staticFiles.add("/sync4j-web/www", Location.CLASSPATH);
             conf.jetty.modifyWebSocketServletFactory(factory -> factory.setIdleTimeout(Duration.ofMinutes(10)));
+            try {
+                registerRoutes(conf.routes);
+                initPlugins(builder, conf.routes);
+            } catch (IOException | RuntimeException e) {
+                failures.add(e);
+            }
         });
     }
 
-    private void registerRoutes() {
-        new LoginRestService(loginManager).registerRoutes(app, "/api/login");
-        new SyncRestService(manager, loginManager).registerRoutes(app, "/api/libraries");
+    private void registerRoutes(RoutesConfig routes) {
+        new LoginRestService(loginManager).registerRoutes(routes, "/api/login");
+        new SyncRestService(manager, loginManager, this::check).registerRoutes(routes, "/api/libraries");
         final String wsPath = "/ws/sync/{" + SyncWsService.LIBRARY_ID_PARAM + "}";
         // The connection is refused (HTTP 401) before the WebSocket is opened if the user is not logged in
-        app.wsBeforeUpgrade(wsPath, ctx -> {
+        routes.wsBeforeUpgrade(wsPath, ctx -> {
             final String error = loginManager.checkLogin(ctx).error();
             if (error != null) {
                 throw new UnauthorizedResponse(error);
             }
         });
-        app.ws(wsPath, wsService.setConfig());
+        routes.ws(wsPath, wsService.setConfig());
         wsService.start();
     }
 
-    private void initPlugins(Builder builder) throws IOException {
+    private void initPlugins(Builder builder, RoutesConfig routes) throws IOException {
         final List<SyncPlugin> all = new ArrayList<>(builder.plugins);
         if (builder.discoverPlugins) {
             for (SyncPluginFactory factory : PluginDiscovery.discover(SyncPluginFactory.class, builder.pluginsDirectory)) {
@@ -302,11 +315,25 @@ public class SyncServer implements AutoCloseable {
             }
             plugins.add(plugin);
             log.info("Initializing plugin {}", plugin.id());
-            plugin.init(new Context(plugin.id(), config.plugins().get(plugin.id())));
+            plugin.init(new Context(plugin.id(), config.plugins().get(plugin.id()), routes));
         }
         // A section that no plugin uses is probably a mistake (a typo, a plugin that can't be loaded, ...)
         config.plugins().keySet().stream().filter(id -> !ids.contains(id))
                 .forEach(id -> log.warn("The configuration has a section '{}' but there is no plugin with this id", id));
+    }
+
+    /** Asks the plugins if they found a problem in a library. */
+    private List<LibraryWarning> check(Library library) {
+        final List<LibraryWarning> warnings = new ArrayList<>();
+        for (SyncPlugin plugin : plugins) {
+            try {
+                plugin.check(library).forEach(message -> warnings.add(new LibraryWarning(plugin.id(), message)));
+            } catch (IOException | RuntimeException e) {
+                log.warn("Plugin {} can't check the library {}", plugin.id(), library.id(), e);
+                warnings.add(new LibraryWarning(plugin.id(), "The library can't be checked: " + e.getMessage()));
+            }
+        }
+        return warnings;
     }
 
     private class PluginsListener implements SyncListener {

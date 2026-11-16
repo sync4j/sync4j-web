@@ -11,7 +11,10 @@ export class SyncForm {
         this.errorMessage = document.getElementById('errorMessage');
         this.statusIndicator = document.getElementById('statusIndicator');
         this.lastSyncTime = document.getElementById('lastSyncTime');
-       
+        this.libraryWarnings = document.getElementById('libraryWarnings');
+        this.libraryWarningsList = document.getElementById('libraryWarningsList');
+        this.recheckBtn = document.getElementById('recheckBtn');
+
         this.setupEventListeners();
     }
 
@@ -19,6 +22,7 @@ export class SyncForm {
         this.startBtn.addEventListener('click', () => this._startSync());
         this.stopBtn.addEventListener('click', () => this.app.stopSync());
         this.librarySelect.addEventListener('change', () => this.app.selectLibrary(this.librarySelect.value));
+        this.recheckBtn.addEventListener('click', () => this.checkLibrary(this.app.currentLibrary));
         this.suffixPath.addEventListener('change', () => this.saveState());
         this.useChecksum.addEventListener('change', () => this.saveState());
     }
@@ -114,6 +118,44 @@ export class SyncForm {
 
     clearError() {
         this.errorMessage.style.display = 'none';
+    }
+
+    // Asks the server if the plugins found a problem in the library, and displays them (the user can ask again, for instance after fixing the problem)
+    async checkLibrary(libraryId) {
+        if (!libraryId) {
+            this.clearWarnings();
+            return;
+        }
+        this.recheckBtn.disabled = true;
+        try {
+            const response = await authenticatedFetch(`/api/libraries/checks/${encodeURIComponent(libraryId)}`);
+            if (!response.ok) {
+                throw new Error('The server answered ' + response.status);
+            }
+            const warnings = await response.json();
+            // The user may have selected another library while the server was checking
+            if (this.app.currentLibrary === libraryId) {
+                this.showWarnings(warnings);
+            }
+        } catch (error) {
+            console.error('Failed to check the library:', error);
+        } finally {
+            this.recheckBtn.disabled = false;
+        }
+    }
+
+    showWarnings(warnings) {
+        this.libraryWarningsList.innerHTML = '';
+        for (const warning of warnings) {
+            const item = document.createElement('li');
+            item.textContent = warning.message;
+            this.libraryWarningsList.appendChild(item);
+        }
+        this.libraryWarnings.style.display = warnings.length > 0 ? 'block' : 'none';
+    }
+
+    clearWarnings() {
+        this.showWarnings([]);
     }
 
     getFormData() {

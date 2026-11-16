@@ -5,7 +5,7 @@ import java.util.Map;
 import com.fathzer.sync4j.web.security.LoginManager;
 import com.fathzer.sync4j.web.security.LoginManager.CheckLoginResponse;
 
-import io.javalin.Javalin;
+import io.javalin.config.RoutesConfig;
 import io.javalin.http.Context;
 
 /**
@@ -18,10 +18,10 @@ public class LoginRestService {
         this.loginManager = loginManager;
     }
 
-    public void registerRoutes(Javalin app, String root) {
-        app.post(root, loginManager::login);
-        app.get(root, this::verifyToken);
-        app.delete(root, loginManager::logout);
+    public void registerRoutes(RoutesConfig routes, String root) {
+        routes.post(root, loginManager::login);
+        routes.get(root, this::verifyToken);
+        routes.delete(root, loginManager::logout);
     }
 
     private void verifyToken(Context ctx) {

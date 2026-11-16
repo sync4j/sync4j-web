@@ -1,7 +1,9 @@
 package com.fathzer.sync4j.web.plugin;
 
 import java.io.IOException;
+import java.util.List;
 
+import com.fathzer.sync4j.config.Library;
 import com.fathzer.sync4j.web.sync.SyncListener;
 
 /**
@@ -23,6 +25,18 @@ public interface SyncPlugin extends SyncListener, AutoCloseable {
      */
     default void init(PluginContext context) throws IOException {
         // Does nothing by default
+    }
+
+    /**
+     * Checks that the plugin can do its job for a library.
+     * <br>It is called when a user selects the library in the web page, and each time the user asks to check it again, so the result should not be cached for long.
+     * It is called by the thread that handles the request: it should return quickly (use time limits when it calls another server).
+     * @param library the library
+     * @return the problems found, that are displayed to the user (an empty list if there is none, as by default)
+     * @throws IOException if the check can't be done (for instance, because a server is not available). The message is displayed to the user as a problem.
+     */
+    default List<String> check(Library library) throws IOException {
+        return List.of();
     }
 
     /**

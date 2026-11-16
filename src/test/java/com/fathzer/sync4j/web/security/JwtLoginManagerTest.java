@@ -49,8 +49,7 @@ class JwtLoginManagerTest {
     }
 
     private void start(JwtLoginManager manager) {
-        app = Javalin.create();
-        new LoginRestService(manager).registerRoutes(app, "/api/login");
+        app = Javalin.create(config -> new LoginRestService(manager).registerRoutes(config.routes, "/api/login"));
         app.start(0);
     }
 

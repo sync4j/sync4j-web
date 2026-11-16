@@ -51,8 +51,7 @@ class LoginRestServiceTest {
     @BeforeEach
     void setUp() {
         loginManager = new StubLoginManager();
-        app = Javalin.create();
-        new LoginRestService(loginManager).registerRoutes(app, "/api/login");
+        app = Javalin.create(config -> new LoginRestService(loginManager).registerRoutes(config.routes, "/api/login"));
         app.start(0);
         client = HttpClient.newHttpClient();
     }
