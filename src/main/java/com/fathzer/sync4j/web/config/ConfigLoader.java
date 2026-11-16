@@ -33,7 +33,7 @@ import com.fathzer.sync4j.config.SynchronizationConfig;
  *         "destination": { "provider": "local", "path": "${LOCAL_PATH_PREFIX}/photos" }
  *       }
  *     ],
- *     "excludePatterns": ["*.tmp"]
+ *     "filters": ["- *.tmp"]
  *   },
  *   "plugins": { "myplugin": { "option": "value" } }
  * }

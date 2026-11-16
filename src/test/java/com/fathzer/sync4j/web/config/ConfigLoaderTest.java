@@ -31,13 +31,13 @@ class ConfigLoaderTest {
         final Path src = Files.createDirectory(tmp.resolve("src"));
         final String json = "{\"secret\":\"abc\",\"synchronization\":{\"libraries\":[" +
                 "{\"id\":\"lib-1\",\"label\":\"Library 1\",\"source\":{\"provider\":\"local\",\"path\":\"" + src + "\"},\"destination\":{\"provider\":\"local\",\"path\":\"" + tmp.resolve("dst") + "\"}}" +
-                "],\"excludePatterns\":[\"*.tmp\"]},\"plugins\":{\"photos\":{\"host\":\"http://localhost\"}}}";
+                "],\"filters\":[\"- *.tmp\"]},\"plugins\":{\"photos\":{\"host\":\"http://localhost\"}}}";
         final Path file = Files.writeString(tmp.resolve("config.json"), json);
 
         final SyncWebConfig config = ConfigLoader.load(file, ProviderRegistry.withDefaults());
 
         assertEquals("abc", config.secret());
-        assertEquals(java.util.List.of("*.tmp"), config.synchronization().excludePatterns());
+        assertEquals(java.util.List.of("- *.tmp"), config.synchronization().filters());
         assertEquals(1, config.synchronization().libraries().size());
         final Library library = config.synchronization().libraries().get(0);
         assertEquals("lib-1", library.id());
@@ -56,7 +56,7 @@ class ConfigLoaderTest {
 
         assertNull(config.secret());
         assertTrue(config.secureCookie(), "The session cookie is secure by default");
-        assertTrue(config.synchronization().excludePatterns().isEmpty());
+        assertTrue(config.synchronization().filters().isEmpty());
         assertTrue(config.plugins().isEmpty());
         // The label is the id by default
         assertEquals("a", config.synchronization().libraries().get(0).label());

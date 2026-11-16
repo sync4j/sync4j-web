@@ -41,10 +41,11 @@ try (SyncServer server = SyncServer.builder(config)
         "id": "photos",
         "label": "My photos",
         "source": { "provider": "pCloud", "path": "/Photos", "config": { "zone": "us", "token": "${PCLOUD_TOKEN}" } },
-        "destination": { "provider": "local", "path": "${LOCAL_PATH_PREFIX}/photos" }
+        "destination": { "provider": "local", "path": "${LOCAL_PATH_PREFIX}/photos" },
+        "filters": ["- *.xmp"]
       }
     ],
-    "excludePatterns": ["*.tmp", "*.db*"]
+    "filters": ["+ /important/**.db", "- *.tmp", "- *.db*"]
   },
   "plugins": {
     "myplugin": { "any": "configuration of the plugin" }
@@ -54,6 +55,7 @@ try (SyncServer server = SyncServer.builder(config)
 
 - `secret`: the key that signs the login tickets (see [Authentication and the secret](#authentication-and-the-secret)). **If it is missing, the security is disabled.**
 - `secureCookie`: `true` by default. The session cookie of the login is then sent by browsers only over https (they also accept it for `localhost`). If the server is used over http, for instance on a local network, the browser silently ignores the cookie: the login seems to work but the user is logged out at the next click. Set it to `false` in that case (a warning is logged at startup, because anybody who listens to the network can then steal a login).
+- `filters`: the rules that tell which entries are synchronized: `- pattern` excludes the entries that match the glob pattern, `+ pattern` includes them. The first rule that matches an entry decides and an entry that no rule matches is synchronized, so an exception goes before the general rule (`["+ /important/**.db", "- *.db*"]` excludes the `.db` files except the ones of `/important`). A pattern that starts with `/` is anchored to the root of the library, any other one can match at any level (`*.tmp` matches the `.tmp` files of all the folders). The rules of `synchronization` apply to all the libraries, the optional ones of a library are tried **before** them, so a library can override a global rule. See `FilterRules` in sync4j for the details (`**`, folders, limits). An invalid rule is an error, and so is the old `excludePatterns`.
 - `id`: only alphanumeric characters, `-` and `_`. `label` is optional (the id by default).
 - `${VARIABLE}` is replaced by the value of the environment variable in `secret` and `path` and in the configuration of the providers (it is an error if the variable is not defined).
 - The configuration of a plugin is the value of its id in `plugins`. The root of the file can only have `secret`, `synchronization` and `plugins`: any other property (for instance a plugin section that is not in `plugins`, or a typo) is an error.

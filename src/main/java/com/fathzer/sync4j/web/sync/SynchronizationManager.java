@@ -17,14 +17,12 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fathzer.sync4j.Entry;
 import com.fathzer.sync4j.FileProvider;
 import com.fathzer.sync4j.Folder;
 import com.fathzer.sync4j.HashAlgorithm;
@@ -32,7 +30,7 @@ import com.fathzer.sync4j.sync.Statistics;
 import com.fathzer.sync4j.sync.Synchronization;
 import com.fathzer.sync4j.sync.parameters.FileComparator;
 import com.fathzer.sync4j.sync.parameters.SyncParameters;
-import com.fathzer.sync4j.util.GlobPatternMatcher;
+import com.fathzer.sync4j.util.FilterRules;
 import com.fathzer.sync4j.config.Library;
 import com.fathzer.sync4j.config.SynchronizationConfig;
 
@@ -266,18 +264,6 @@ public class SynchronizationManager implements AutoCloseable {
         return SyncStatus.failed("Synchronization failed with " + errors.size() + " error(s), the first one is: " + errors.get(0).getMessage(), statistics);
     }
 
-    private static Predicate<Entry> createExcludeFilter(List<String> excludePatterns) {
-        final List<GlobPatternMatcher> globPatternMatchers = excludePatterns.stream().map(p -> new GlobPatternMatcher(p, true)).toList();
-        return entry -> {
-            try {
-                final String path = entry.getPath();
-                return globPatternMatchers.stream().noneMatch(globPatternMatcher -> globPatternMatcher.test(path));
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-        };
-    }
-
     /**
      * Builds a synchronization (it is not started).
      * <br>The providers are closed if the synchronization can't be built.
@@ -292,8 +278,10 @@ public class SynchronizationManager implements AutoCloseable {
                 final HashAlgorithm hash = FileComparator.hash(sourceEntry.getFileProvider(), destinationEntry.getFileProvider());
                 syncParameters.fileComparator(FileComparator.of(List.of(FileComparator.SIZE, FileComparator.MOD_DATE, FileComparator.hash(hash))));
             }
-            if (config.excludePatterns() != null && !config.excludePatterns().isEmpty()) {
-                syncParameters.filter(createExcludeFilter(config.excludePatterns()));
+            // The rules of the library, then the global ones
+            final FilterRules filters = FilterRules.of(config.filters(request.library()));
+            if (!filters.isEmpty()) {
+                syncParameters.filter(filters.toEntryFilter());
             }
             syncParameters.errorManager((e, action) -> {
                 log.warn("action {} failed", action, e);

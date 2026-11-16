@@ -142,6 +142,38 @@ class SynchronizationManagerTest {
     }
 
     @Test
+    void testFiltersAreGlobalAndOfTheLibrary() throws Exception {
+        Files.createDirectory(source.resolve("keep"));
+        for (String name : List.of("a.txt", "b.tmp", "c.xmp", "keep/d.tmp", "keep/e.xmp")) {
+            Files.writeString(source.resolve(name), name);
+        }
+        final Library base = library();
+        final Library library = new Library(base.id(), base.label(), base.source(), base.destination(), List.of("+ /keep/**.xmp", "- *.xmp"));
+        final SynchronizationManager withPatterns = new SynchronizationManager(new SynchronizationConfig(List.of(library), List.of("- *.tmp")), statusFile);
+        withPatterns.setBroadcaster(new SynchronizationManager.SyncBroadcaster() {
+            @Override
+            public void broadcast(String libraryId, Statistics progress) {
+                // Not needed
+            }
+
+            @Override
+            public void broadcast(String libraryId, SyncStatus status) {
+                statuses.add(status);
+            }
+        });
+
+        withPatterns.run(new SyncRequest(library, false));
+        final SyncStatus status = awaitEnd();
+
+        assertEquals(SyncStatus.Status.COMPLETED, status.status(), status.errorMessage());
+        assertTrue(Files.exists(destination.resolve("a.txt")));
+        assertFalse(Files.exists(destination.resolve("b.tmp")), "The global pattern should apply");
+        assertFalse(Files.exists(destination.resolve("c.xmp")), "The pattern of the library should apply");
+        assertFalse(Files.exists(destination.resolve("keep/d.tmp")), "The global pattern should apply in sub folders");
+        assertTrue(Files.exists(destination.resolve("keep/e.xmp")), "The library rules are tried first");
+    }
+
+    @Test
     void testSynchronizationContinuesAfterAnError() throws Exception {
         Files.writeString(source.resolve("a.txt"), "a");
         final Path unreadable = Files.writeString(source.resolve("b.txt"), "b");
