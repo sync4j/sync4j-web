@@ -166,11 +166,14 @@ export class SyncForm {
         };
     }
 
+    // Waits for the server to say what the status of the library is (the buttons are enabled when it is received)
     reset() {
+        this.resetLibraryStatus();
+        // After resetLibraryStatus, that enables the start button
         this.startBtn.disabled = true;
         this.stopBtn.disabled = true;
-        this.resetLibraryStatus();
-		this.librarySelect.disabled = true;
+        // Without a library, there is no status to wait for (nothing would enable the list again)
+        this.librarySelect.disabled = this.librarySelect.value !== '';
     }
 
     _setLoading(loading) {

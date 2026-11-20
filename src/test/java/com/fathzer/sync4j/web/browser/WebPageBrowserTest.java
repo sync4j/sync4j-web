@@ -24,9 +24,12 @@ import com.fathzer.sync4j.web.SyncServer;
 import com.fathzer.sync4j.web.config.ConfigLoader;
 import com.fathzer.sync4j.web.config.SyncWebConfig;
 import com.fathzer.sync4j.config.Library;
+import com.fathzer.sync4j.web.plugin.PluginContext;
 import com.fathzer.sync4j.web.plugin.SyncPlugin;
 import com.fathzer.sync4j.web.security.AuthenticationFailedException;
 import com.fathzer.sync4j.web.security.SecretGenerator;
+import com.fathzer.sync4j.web.sync.SyncRequest;
+import com.fathzer.sync4j.web.sync.SyncStatus;
 
 /**
  * Tests the web page in a real browser (Chrome, headless), with a real server.
@@ -84,9 +87,22 @@ class WebPageBrowserTest {
             }
             throw new AuthenticationFailedException(401, "Bad credentials", null);
         }).plugin(new SyncPlugin() {
+            private volatile PluginContext context;
+
             @Override
             public String id() {
                 return "checker";
+            }
+
+            @Override
+            public void init(PluginContext context) {
+                this.context = context;
+            }
+
+            @Override
+            public void afterSync(SyncRequest request, SyncStatus status) {
+                // For instance, a plugin that tells what it does after a synchronization
+                context.publish(request.library().id(), java.util.Map.of("message", "Scan requested"));
             }
 
             @Override
@@ -237,6 +253,43 @@ class WebPageBrowserTest {
 
         browser.waitUntil(() -> browser.responsesSince(mark, base).contains("200 /api/libraries/checks/photos"), "the check of the library");
         assertFalse(browser.isTrue(visible("libraryWarnings")));
+    }
+
+    @Test
+    void testStartIsNotAvailableBeforeTheConnectionToTheServer() {
+        open();
+        loginAndWaitForTheLibraries();
+
+        // The buttons are disabled as soon as a library is selected: a synchronization started now would not be followed (the page is not connected yet)
+        assertTrue(browser.isTrue("(() => { const s = document.getElementById('librarySelect'); s.value = 'photos'; s.dispatchEvent(new Event('change'));"
+                + " return document.getElementById('startBtn').disabled && document.getElementById('stopBtn').disabled; })()"));
+
+        // ... until the server sends the status of the library
+        browser.waitFor("!document.getElementById('startBtn').disabled", "the start button");
+        assertTrue(browser.isTrue("document.getElementById('stopBtn').disabled"), "Nothing is running");
+        assertNotEquals("", browser.text("document.getElementById('lastSyncTime').textContent"));
+
+        // Selecting no library disables the start button again
+        selectLibrary("");
+        assertTrue(browser.isTrue("document.getElementById('startBtn').disabled"));
+        // ... and the user can still choose a library
+        assertFalse(browser.isTrue("document.getElementById('librarySelect').disabled"), "The list of the libraries should not stay disabled");
+    }
+
+    @Test
+    void testTheMessagesOfThePluginsAreVisible() {
+        open();
+        loginAndWaitForTheLibraries();
+        selectTheLibrary();
+        // The page is connected when it displays the status that the server sends to the new connections (the messages published before are not sent again)
+        browser.waitFor("document.getElementById('lastSyncTime').textContent !== ''", "the connection to the server");
+
+        browser.evaluate("document.getElementById('startBtn').click()");
+
+        // The plugin tells what it does when the synchronization is over: the user has to see it
+        browser.waitFor("document.getElementById('logOutput').textContent.includes('[checker] Scan requested')", "the message of the plugin", SYNCHRONIZATION_TIMEOUT);
+        assertTrue(browser.isTrue(visible("logOutput")), "The log should be displayed");
+        assertTrue(browser.isTrue("document.getElementById('logOutput').getBoundingClientRect().height > 0"), "The log should take some room");
     }
 
     @Test

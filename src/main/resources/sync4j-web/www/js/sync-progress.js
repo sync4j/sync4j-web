@@ -203,7 +203,10 @@ export class SyncProgress {
         this.checksBlock.reset();
         this.bytesBlock.reset();
         this.pluginBlocks.forEach(block => block.reset());
-        if (this.logOutput) this.logOutput.innerHTML = '';
+        if (this.logOutput) {
+            this.logOutput.innerHTML = '';
+            this.logOutput.classList.remove('show');
+        }
         this.resetStatusIndicators();
     }
 
@@ -218,6 +221,8 @@ export class SyncProgress {
         logEntry.className = 'log-entry';
         logEntry.textContent = `[${new Date().toISOString()}] ${message}`;
         this.logOutput.appendChild(logEntry);
+        // The log is hidden as long as it is empty
+        this.logOutput.classList.add('show');
         this.logOutput.scrollTop = this.logOutput.scrollHeight;
     }
 
