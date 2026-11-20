@@ -15,6 +15,9 @@ class SynchronizationUI {
     // True once the user is logged in and the application loaded its data
     started = false;
 
+    // The last status of the library sent by the server (null if none was received since the last request to start a synchronization)
+    lastStatus = null;
+
     // Starts the application: it needs the user to be logged in, because the server only answers to logged in users
     async start() {
         if (this.started) {
@@ -86,8 +89,10 @@ class SynchronizationUI {
         this.syncProgress.showProgressSection();
         this.syncProgress.showStatus('Starting sync...', 'info');
         this.syncProgress.addLog('Connecting to sync service...');
+        this.syncProgress.addLog(`Checksum verification: ${this.syncForm.useChecksum.checked ? 'enabled' : 'disabled'}`);
 
         // Then start the sync
+        this.lastStatus = null;
         const response = await authenticatedFetch(`/api/libraries/sync/${encodeURIComponent(this.currentLibrary)}`, {
             method: 'POST',
             headers: {
@@ -105,8 +110,10 @@ class SynchronizationUI {
         }
 
         this.isRunning = true;
-        this.syncProgress.showStatus('Sync started successfully', 'success');
-        this.syncProgress.addLog(`Checksum verification: ${this.syncForm.useChecksum.checked ? 'enabled' : 'disabled'}`);
+        // A short synchronization can be over before the answer to the request is received: its final status should not be replaced
+        if (!this.isFinished(this.lastStatus)) {
+            this.syncProgress.showStatus('Sync started successfully', 'success');
+        }
     }
 
     async stopSync() {
@@ -262,7 +269,12 @@ class SynchronizationUI {
         }
     }
 
+    isFinished(status) {
+        return ['COMPLETED', 'FAILED', 'CANCELLED'].includes(status?.status);
+    }
+
     handleStatusUpdate(status) {
+        this.lastStatus = status;
         this.syncForm.updateLibraryStatus(status);
         this.syncProgress.updateLibraryStatus(status);
     }

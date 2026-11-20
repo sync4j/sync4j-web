@@ -163,7 +163,8 @@ class WebPageBrowserTest {
 
         loginAndWaitForTheLibraries();
 
-        assertEquals(List.of("200 /api/libraries", "200 /api/libraries/sync"), browser.responsesSince(mark, base).stream().filter(r -> r.contains("/api/libraries")).toList());
+        // The page sends the two requests at the same time: the order of the answers is not defined
+        assertEquals(List.of("200 /api/libraries", "200 /api/libraries/sync"), browser.responsesSince(mark, base).stream().filter(r -> r.contains("/api/libraries")).sorted().toList());
         assertEquals(List.of("Select a library...", "Photos"), MAPPER.convertValue(browser.evaluate("Array.from(document.getElementById('librarySelect').options).map(o => o.textContent)"), List.class));
         assertEquals(List.of(), browser.javascriptErrorsSince(mark));
     }
@@ -236,6 +237,29 @@ class WebPageBrowserTest {
 
         browser.waitUntil(() -> browser.responsesSince(mark, base).contains("200 /api/libraries/checks/photos"), "the check of the library");
         assertFalse(browser.isTrue(visible("libraryWarnings")));
+    }
+
+    @Test
+    void testTheEndOfAFastSynchronizationIsNotReplacedByItsStart() throws IOException {
+        final int mark = browser.mark();
+        open();
+        loginAndWaitForTheLibraries();
+        selectTheLibrary();
+        browser.waitFor("!document.getElementById('startBtn').disabled", "the start button");
+        // The answer to the request that starts the synchronization is received long after the end of the (short) synchronization
+        browser.evaluate("(() => { const original = window.fetch; window.__startAnswered = false;"
+                + " window.fetch = (url, options) => original(url, options).then(response => options?.method === 'POST'"
+                + " ? new Promise(resolve => setTimeout(() => { window.__startAnswered = true; resolve(response); }, 2000)) : response); })()");
+
+        browser.evaluate("document.getElementById('startBtn').click()");
+
+        browser.waitFor("document.getElementById('logOutput').textContent.includes('Sync completed successfully')", "the end of the synchronization", SYNCHRONIZATION_TIMEOUT);
+        assertFalse(browser.isTrue("window.__startAnswered"), "The synchronization should be over before the answer to the request");
+        browser.waitFor("window.__startAnswered", "the answer to the request that starts the synchronization");
+        browser.settle();
+        assertEquals("Sync completed successfully", browser.text("document.getElementById('statusMessage').textContent"));
+        assertEquals("photo one", Files.readString(destination.resolve("a.jpg")));
+        assertEquals(List.of(), browser.javascriptErrorsSince(mark));
     }
 
     @Test

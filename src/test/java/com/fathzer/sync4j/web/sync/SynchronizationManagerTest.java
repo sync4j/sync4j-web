@@ -73,12 +73,35 @@ class SynchronizationManagerTest {
         }, path.toString());
     }
 
+    /** A location whose provider supports no hash algorithm. */
+    private FolderLocation locationWithoutHash(Path path) {
+        return new FolderLocation(r -> {
+            opened.incrementAndGet();
+            return new LocalProvider(Paths.get(r)) {
+                @Override
+                public java.util.List<com.fathzer.sync4j.HashAlgorithm> getSupportedHash() {
+                    return List.of();
+                }
+
+                @Override
+                public void close() {
+                    closed.incrementAndGet();
+                    super.close();
+                }
+            };
+        }, path.toString());
+    }
+
     private Library library() {
         return new Library(LIBRARY_ID, "Test library", location(source), location(destination));
     }
 
     private SynchronizationManager newManager() {
-        final SynchronizationManager result = new SynchronizationManager(new SynchronizationConfig(List.of(library()), List.of()), statusFile);
+        return newManager(library());
+    }
+
+    private SynchronizationManager newManager(Library library) {
+        final SynchronizationManager result = new SynchronizationManager(new SynchronizationConfig(List.of(library), List.of()), statusFile);
         result.setBroadcaster(new SynchronizationManager.SyncBroadcaster() {
             @Override
             public void broadcast(String libraryId, Statistics progress) {
@@ -250,6 +273,45 @@ class SynchronizationManagerTest {
         assertEquals(SyncStatus.Status.IDLE, manager.getSyncStatus("broken").status());
         // The failed library is not considered as running
         assertThrows(IOException.class, () -> manager.run(new SyncRequest(library, false)));
+    }
+
+    @Test
+    void testChecksumsComparisonIsRefusedIfThereIsNoCommonHashAlgorithm() throws Exception {
+        Files.writeString(source.resolve("a.txt"), "a");
+        Files.writeString(destination.resolve("a.txt"), "xx");
+        final Library library = new Library("nohash", "No hash", location(source), locationWithoutHash(destination));
+
+        // With the checksums, it can't be compared: it is refused before anything starts, with a message that tells why
+        final IOException e = assertThrows(IOException.class, () -> manager.run(new SyncRequest(library, true)));
+
+        assertTrue(e.getMessage().contains("no hash algorithm in common"), e.getMessage());
+        assertEquals(opened.get(), closed.get(), "The providers should be closed");
+        assertEquals(SyncStatus.Status.IDLE, manager.getSyncStatus("nohash").status());
+        assertEquals("xx", Files.readString(destination.resolve("a.txt")), "Nothing should be synchronized");
+
+        // Without the checksums, the same library can be synchronized
+        final SynchronizationManager other = newManager(library);
+        other.run(new SyncRequest(library, false));
+        assertEquals(SyncStatus.Status.COMPLETED, awaitEnd().status());
+        assertEquals("a", Files.readString(destination.resolve("a.txt")));
+        other.close();
+    }
+
+    @Test
+    void testChecksumsDetectAFileThatHasTheSameSizeAndDate() throws Exception {
+        final Path sourceFile = Files.writeString(source.resolve("a.txt"), "aaa");
+        final Path destinationFile = Files.writeString(destination.resolve("a.txt"), "bbb");
+        Files.setLastModifiedTime(destinationFile, Files.getLastModifiedTime(sourceFile));
+
+        // Without the checksums, the files look the same
+        manager.run(request());
+        assertEquals(SyncStatus.Status.COMPLETED, awaitEnd().status());
+        assertEquals("bbb", Files.readString(destinationFile));
+
+        // ... but not with them
+        manager.run(new SyncRequest(manager.getLibraries().get(0), true));
+        assertEquals(SyncStatus.Status.COMPLETED, awaitEnd().status());
+        assertEquals("aaa", Files.readString(destinationFile));
     }
 
     @Test

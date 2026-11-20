@@ -276,6 +276,10 @@ public class SynchronizationManager implements AutoCloseable {
             final SyncParameters syncParameters = new SyncParameters();
             if (request.checksum()) {
                 final HashAlgorithm hash = FileComparator.hash(sourceEntry.getFileProvider(), destinationEntry.getFileProvider());
+                if (hash == null) {
+                    // Refused now, otherwise the comparison of each file would fail
+                    throw new IOException("The checksums can't be compared: the source and the destination have no hash algorithm in common");
+                }
                 syncParameters.fileComparator(FileComparator.of(List.of(FileComparator.SIZE, FileComparator.MOD_DATE, FileComparator.hash(hash))));
             }
             // The rules of the library, then the global ones
