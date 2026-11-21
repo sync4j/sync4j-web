@@ -2,6 +2,7 @@ package com.fathzer.sync4j.web.plugin;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 import com.fathzer.sync4j.config.Library;
 import com.fathzer.sync4j.web.sync.SyncListener;
@@ -35,8 +36,21 @@ public interface SyncPlugin extends SyncListener, AutoCloseable {
      * @return the problems found, that are displayed to the user (an empty list if there is none, as by default)
      * @throws IOException if the check can't be done (for instance, because a server is not available). The message is displayed to the user as a problem.
      */
-    default List<String> check(Library library) throws IOException {
+    default List<Message> check(Library library) throws IOException {
         return List.of();
+    }
+
+    /**
+     * Gets the translations of the texts of the plugin (see {@link Message}).
+     * <br>It is called when the page asks for its translations, with the language chosen for the user (for instance <code>fr</code>).
+     * The keys are shared with the ones of the page and of the other plugins: start them with the id of the plugin.
+     * The English texts are the fallbacks of the messages, so there is nothing to return for English.
+     * {@link com.fathzer.sync4j.web.i18n.Translations#load} reads them from <code>.properties</code> files.
+     * @param language the language, in lowercase (<code>fr</code>)
+     * @return the translations by key (empty by default)
+     */
+    default Map<String, String> translations(String language) {
+        return Map.of();
     }
 
     /**

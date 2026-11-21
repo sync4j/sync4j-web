@@ -6,7 +6,7 @@ export async function authenticatedFetch(url, options = {}) {
     const response = await fetch(url, { credentials: 'same-origin', ...options });
     if (response.status === 401) {
         globalThis.authManager?.sessionExpired();
-        throw new Error('Your session has expired, please log in again');
+        throw new Error(i18n.t('session.expired', 'Your session has expired, please log in again'));
     }
     return response;
 }

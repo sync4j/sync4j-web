@@ -24,6 +24,7 @@ import com.fathzer.sync4j.web.SyncServer;
 import com.fathzer.sync4j.web.config.ConfigLoader;
 import com.fathzer.sync4j.web.config.SyncWebConfig;
 import com.fathzer.sync4j.config.Library;
+import com.fathzer.sync4j.web.plugin.Message;
 import com.fathzer.sync4j.web.plugin.PluginContext;
 import com.fathzer.sync4j.web.plugin.SyncPlugin;
 import com.fathzer.sync4j.web.security.AuthenticationFailedException;
@@ -49,7 +50,7 @@ class WebPageBrowserTest {
     private Path destination;
     private SyncServer server;
     private String base;
-    private final AtomicReference<List<String>> libraryWarnings = new AtomicReference<>(List.of());
+    private final AtomicReference<List<Message>> libraryWarnings = new AtomicReference<>(List.of());
 
     @BeforeAll
     static void startBrowser() throws IOException, InterruptedException {
@@ -105,12 +106,17 @@ class WebPageBrowserTest {
             @Override
             public void afterSync(SyncRequest request, SyncStatus status) {
                 // For instance, a plugin that tells what it does after a synchronization
-                context.publish(request.library().id(), java.util.Map.of("message", "Scan requested", "label", "Checker", "state", "RUNNING",
-                        "details", List.of("Thumbnails: 3 left"), "progress", java.util.Map.of("done", 1, "total", 2)));
+                context.publish(request.library().id(), java.util.Map.of("message", Message.of("checker.scan", "Scan requested"), "label", "Checker", "state", "RUNNING",
+                        "details", List.of(Message.of("checker.left", "Thumbnails: {0} left", 3)), "progress", java.util.Map.of("done", 1, "total", 2)));
             }
 
             @Override
-            public List<String> check(Library library) {
+            public java.util.Map<String, String> translations(String language) {
+                return "fr".equals(language) ? java.util.Map.of("checker.scan", "Analyse demandée", "checker.left", "Miniatures : {0} restantes") : java.util.Map.of();
+            }
+
+            @Override
+            public List<Message> check(Library library) {
                 return libraryWarnings.get();
             }
         }).statusFile(tmp.resolve("statuses.json")).title("Test dashboard").build();
@@ -159,8 +165,8 @@ class WebPageBrowserTest {
         browser.settle();
         assertFalse(browser.isTrue(visible("app-content")), "The application should not be displayed");
         // ... and the title, that is public (the login form is displayed with it)
-        assertEquals(List.of("GET /api/login", "GET /api/ui"), browser.requestsSince(mark, base).stream().filter(r -> r.contains("/api/")).sorted().toList());
-        assertEquals(List.of("200 /api/ui", "401 /api/login"), browser.responsesSince(mark, base).stream().filter(r -> r.contains("/api/")).sorted().toList());
+        assertEquals(List.of("GET /api/i18n", "GET /api/login", "GET /api/ui"), browser.requestsSince(mark, base).stream().filter(r -> r.contains("/api/")).sorted().toList());
+        assertEquals(List.of("200 /api/i18n", "200 /api/ui", "401 /api/login"), browser.responsesSince(mark, base).stream().filter(r -> r.contains("/api/")).sorted().toList());
         assertEquals(List.of(), browser.webSocketsSince(mark));
         assertEquals(List.of(), browser.javascriptErrorsSince(mark));
     }
@@ -221,7 +227,7 @@ class WebPageBrowserTest {
 
     @Test
     void testTheWarningsOfThePluginsAreDisplayedAndCanBeChecked() {
-        libraryWarnings.set(List.of("The library is not ready", "Something else"));
+        libraryWarnings.set(List.of(Message.text("The library is not ready"), Message.of("checker.other", "Something else")));
         open();
         loginAndWaitForTheLibraries();
         final int mark = browser.mark();
@@ -239,7 +245,7 @@ class WebPageBrowserTest {
         browser.waitFor("!" + visible("libraryWarnings"), "the end of the warnings");
 
         // Another problem, then the user selects no library any more
-        libraryWarnings.set(List.of("Again"));
+        libraryWarnings.set(List.of(Message.text("Again")));
         selectLibrary("");
         selectLibrary("photos");
         browser.waitFor(visible("libraryWarnings"), "the new warning");
@@ -451,6 +457,93 @@ class WebPageBrowserTest {
         } finally {
             browser.send("Emulation.clearDeviceMetricsOverride");
         }
+    }
+
+    @Test
+    void testTheOnlyButtonOfAPhoneIsStartThenStop() {
+        open();
+        loginAndWaitForTheLibraries();
+        final String start = "document.getElementById('startBtn').getBoundingClientRect().height > 0";
+        final String stop = "document.getElementById('stopBtn').getBoundingClientRect().height > 0";
+        // Both buttons are displayed on a large screen
+        assertTrue(browser.isTrue(start + " && " + stop));
+        browser.send("Emulation.setDeviceMetricsOverride", MAPPER.createObjectNode().put("width", 375).put("height", 700).put("deviceScaleFactor", 1).put("mobile", true));
+        try {
+            browser.waitFor("window.innerWidth <= 400", "the size of a phone");
+            assertTrue(browser.isTrue(start), "Start should be displayed");
+            assertFalse(browser.isTrue(stop), "Stop is useless as long as nothing runs");
+            assertEquals("Start Synchronization", browser.text("document.getElementById('startBtn').textContent"));
+
+            // While the library is synchronizing, the user can only stop it
+            browser.evaluate("document.querySelector('.form-actions').classList.add('running')");
+            assertFalse(browser.isTrue(start));
+            assertTrue(browser.isTrue(stop));
+            assertEquals("Stop Synchronization", browser.text("document.getElementById('stopBtn').textContent"));
+        } finally {
+            browser.send("Emulation.clearDeviceMetricsOverride");
+        }
+    }
+
+    @Test
+    void testTheStartButtonOfAPhoneIsBackWhenTheSynchronizationIsOver() {
+        open();
+        loginAndWaitForTheLibraries();
+        browser.send("Emulation.setDeviceMetricsOverride", MAPPER.createObjectNode().put("width", 375).put("height", 700).put("deviceScaleFactor", 1).put("mobile", true));
+        try {
+            selectTheLibrary();
+            browser.waitFor("document.getElementById('lastSyncTime').textContent !== ''", "the connection to the server");
+            browser.evaluate("document.getElementById('startBtn').click()");
+            browser.waitFor("document.getElementById('progressBadge').textContent === 'Done'", "the end of the synchronization", SYNCHRONIZATION_TIMEOUT);
+            // Once it is over, Start is back
+            assertTrue(browser.isTrue("document.getElementById('startBtn').getBoundingClientRect().height > 0"));
+            assertFalse(browser.isTrue("document.getElementById('stopBtn').getBoundingClientRect().height > 0"));
+        } finally {
+            browser.send("Emulation.clearDeviceMetricsOverride");
+        }
+    }
+
+    @Test
+    void testThePageIsTranslatedIntoTheLanguageOfTheSystem() {
+        browser.setAcceptLanguage("fr-FR,fr,en");
+        open();
+        // The login form
+        assertEquals("fr", browser.text("document.documentElement.lang"));
+        assertEquals("Connexion", browser.text("document.querySelector('#login-form h2').textContent"));
+        assertEquals("Se connecter", browser.text("document.getElementById('login-button').textContent.trim()"));
+
+        loginAndWaitForTheLibraries();
+        // The texts of the page, its attributes and the ones that the scripts create
+        assertEquals("Déconnexion", browser.text("document.getElementById('logout-button').textContent"));
+        assertEquals("Bibliothèque :", browser.text("document.querySelector('label[for=librarySelect]').textContent"));
+        assertEquals("ex. : sous-dossier/chemin", browser.text("document.getElementById('suffixPath').placeholder"));
+        assertEquals("Démarrer la synchronisation", browser.text("document.getElementById('startBtn').textContent"));
+        assertEquals("Choisir une bibliothèque...", browser.text("document.getElementById('librarySelect').options[0].textContent"));
+        assertEquals("Journal technique", browser.text("document.querySelector('#logSection h2').textContent"));
+
+        selectTheLibrary();
+        browser.waitFor("document.getElementById('lastSyncTime').textContent !== ''", "the connection to the server");
+        assertEquals("Jamais", browser.text("document.getElementById('lastSyncTime').textContent"));
+        browser.evaluate("document.getElementById('startBtn').click()");
+        browser.waitFor("document.getElementById('progressBadge').textContent === 'Terminé'", "the end of the synchronization", SYNCHRONIZATION_TIMEOUT);
+        assertEquals("Fichiers vérifiés", browser.text("document.querySelector('.progress-block h3').textContent"));
+
+        // The card of the plugin is translated by the page, with the translations of the plugin
+        browser.waitFor("document.querySelector('#pluginCards .plugin-card') !== null", "the card of the plugin", SYNCHRONIZATION_TIMEOUT);
+        assertEquals("Checker", browser.text("document.querySelector('#pluginCards .plugin-card h2').textContent"));
+        assertEquals("En cours", browser.text("document.querySelector('#pluginCards .badge').textContent"));
+        assertEquals("Analyse demandée", browser.text("document.querySelector('#pluginCards .plugin-card-message').textContent"));
+        assertEquals(List.of("Miniatures : 3 restantes"), MAPPER.convertValue(browser.evaluate("Array.from(document.querySelectorAll('#pluginCards .plugin-card-details li')).map(e => e.textContent)"), List.class));
+        browser.waitFor("document.getElementById('logOutput').textContent.includes('[checker] Analyse demandée')", "the translated message in the log");
+    }
+
+    @Test
+    void testThePageIsInEnglishWhenTheLanguageIsNotKnown() {
+        browser.setAcceptLanguage("de-DE,de");
+        open();
+        assertEquals("en", browser.text("document.documentElement.lang"));
+        assertEquals("Login", browser.text("document.querySelector('#login-form h2').textContent"));
+        loginAndWaitForTheLibraries();
+        assertEquals("Start Synchronization", browser.text("document.getElementById('startBtn').textContent"));
     }
 
     private double luminance(String selector, String property) {

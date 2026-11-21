@@ -14,6 +14,7 @@ export class SyncForm {
         this.libraryWarnings = document.getElementById('libraryWarnings');
         this.libraryWarningsList = document.getElementById('libraryWarningsList');
         this.recheckBtn = document.getElementById('recheckBtn');
+        this.formActions = this.startBtn.parentElement;
 
         this.setupEventListeners();
     }
@@ -58,7 +59,7 @@ export class SyncForm {
             ]);
             
             if (!librariesRes.ok || !statusesRes.ok) {
-                throw new Error('Failed to load library data');
+                throw new Error(i18n.t('form.loadData', 'Failed to load library data'));
             }
             
             const libraries = await librariesRes.json();
@@ -70,14 +71,14 @@ export class SyncForm {
             this.clearError();
             
             if (libraries.length === 0) {
-                this.librarySelect.innerHTML = '<option value="">No libraries configured</option>';
+                this.librarySelect.innerHTML = `<option value="">${i18n.t('form.noLibraries', 'No libraries configured')}</option>`;
                 this.startBtn.disabled = true;
                 return;
             }
 
             const defaultOption = document.createElement('option');
             defaultOption.value = '';
-            defaultOption.textContent = 'Select a library...';
+            defaultOption.textContent = i18n.t('form.select', 'Select a library...');
             this.librarySelect.appendChild(defaultOption);
 
             for (const library of libraries) {
@@ -104,8 +105,8 @@ export class SyncForm {
             return null;
         } catch (error) {
             console.error('Failed to load libraries:', error);
-            this.showError('Failed to load libraries: ' + error.message);
-            this.librarySelect.innerHTML = '<option value="">Failed to load libraries</option>';
+            this.showError(i18n.t('form.loadFailed', 'Failed to load libraries: {0}', error.message));
+            this.librarySelect.innerHTML = `<option value="">${i18n.t('form.loadFailedShort', 'Failed to load libraries')}</option>`;
             this.startBtn.disabled = true;
             return null;
         }
@@ -148,7 +149,7 @@ export class SyncForm {
         this.libraryWarningsList.innerHTML = '';
         for (const warning of warnings) {
             const item = document.createElement('li');
-            item.textContent = warning.message;
+            item.textContent = i18n.text(warning.message);
             this.libraryWarningsList.appendChild(item);
         }
         this.libraryWarnings.style.display = warnings.length > 0 ? 'block' : 'none';
@@ -177,6 +178,8 @@ export class SyncForm {
     }
 
     _setLoading(loading) {
+        // On a small screen, only the button that can be used is displayed (see the styles)
+        this.formActions.classList.toggle('running', loading);
         this.startBtn.disabled = loading;
         this.stopBtn.disabled = !loading;
     }
@@ -187,13 +190,13 @@ export class SyncForm {
             await this.app.startSync();
         } catch (error) {
             console.error('Failed to start sync:', error);
-            this.showError('Failed to start sync: ' + error.message);
+            this.showError(i18n.t('sync.startFailed', 'Failed to start sync: {0}', error.message));
             this._setLoading(false);
         }
     }
 
     _formatLastSyncTime(isoString) {
-        if (!isoString) return 'Never';
+        if (!isoString) return i18n.t('form.never', 'Never');
         const date = new Date(isoString);
         return date.toLocaleString(undefined, {
             year: 'numeric',
@@ -214,7 +217,7 @@ export class SyncForm {
         let statusClass;
         
         if (status.status === 'SYNCING') {
-            lastSyncTimeText = 'Syncing';
+            lastSyncTimeText = i18n.t('form.syncing', 'Syncing');
             loading = true;
             statusClass = 'syncing';
             this.librarySelect.disabled = true;

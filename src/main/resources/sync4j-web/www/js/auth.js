@@ -130,17 +130,17 @@ class AuthManager {
 
         // HTML du formulaire
         loginContainer.innerHTML = `
-            <h2 style="text-align: center; margin-bottom: 20px;">Login</h2>
+            <h2 style="text-align: center; margin-bottom: 20px;">${i18n.t('login.title', 'Login')}</h2>
             <form id="auth-form">
                 <div class="form-group">
-                    <label for="user">Username:</label>
+                    <label for="user">${i18n.t('login.user', 'Username:')}</label>
                     <input type="text" id="user" autocomplete="username" required>
                 </div>
                 <div class="form-group">
-                    <label for="password">Password:</label>
+                    <label for="password">${i18n.t('login.password', 'Password:')}</label>
                     <div class="input-container">
                         <input type="password" id="password" required>
-                        <button type="button" class="password-toggle" id="togglePassword" aria-label="Show password" 
+                        <button type="button" class="password-toggle" id="togglePassword" aria-label="${i18n.t('login.showPassword', 'Show password')}" 
                             data-visible="false"
                             style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
                                    background: none; border: none; cursor: pointer; padding: 0;
@@ -151,7 +151,7 @@ class AuthManager {
                 <button type="submit" id="login-button" 
                     style="width: 100%; padding: 10px; background-color: #2E7D32; color: white;
                            border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-top: 10px;">
-                    Sign In
+                    ${i18n.t('login.signIn', 'Sign In')}
                 </button>
                 <div id="login-error" style="margin-top: 10px; text-align: center;"></div>
             </form>
@@ -173,7 +173,7 @@ class AuthManager {
                 
                 // Toggle the icon and update attributes
                 togglePassword.dataset.visible = isVisible;
-                togglePassword.setAttribute('aria-label', isVisible ? 'Hide password' : 'Show password');
+                togglePassword.setAttribute('aria-label', isVisible ? i18n.t('login.hidePassword', 'Hide password') : i18n.t('login.showPassword', 'Show password'));
             });
         }
     }
@@ -244,7 +244,7 @@ class AuthManager {
     /** The session is not valid any more: displays the login form. */
     sessionExpired() {
         this.showLoginForm();
-        this.showError('Your session has expired, please log in again');
+        this.showError(i18n.t('session.expired', 'Your session has expired, please log in again'));
     }
 
     async login(user, password) {
@@ -259,7 +259,7 @@ class AuthManager {
             });
 
             if (!response.ok) {
-                let errorMessage = 'Login failed';
+                let errorMessage = i18n.t('login.failed', 'Login failed');
                 const errorData = await response.json();
                 errorMessage = errorData.message || errorMessage;
                 throw new Error(errorMessage);
@@ -343,6 +343,8 @@ class AuthManager {
 
 // Initialize authentication when the page loads
 document.addEventListener('DOMContentLoaded', async () => {
+    // The login form is built with the texts of the language of the user
+    await i18n.ready;
     const authManager = new AuthManager();
     globalThis.authManager = authManager;
     try {
@@ -352,7 +354,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Show error to user if needed
         const errorDiv = document.getElementById('login-error');
         if (errorDiv) {
-            errorDiv.textContent = 'Failed to initialize authentication. Please refresh the page.';
+            errorDiv.textContent = i18n.t('login.initFailed', 'Failed to initialize authentication. Please refresh the page.');
         }
     }
 });

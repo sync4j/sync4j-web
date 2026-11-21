@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,7 +19,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.MissingNode;
 import com.fathzer.sync4j.config.Library;
 import com.fathzer.sync4j.web.config.SyncWebConfig;
+import com.fathzer.sync4j.web.i18n.I18n;
 import com.fathzer.sync4j.web.plugin.LibraryWarning;
+import com.fathzer.sync4j.web.plugin.Message;
 import com.fathzer.sync4j.web.plugin.PluginContext;
 import com.fathzer.sync4j.config.PluginDiscovery;
 import com.fathzer.sync4j.web.plugin.SyncPlugin;
@@ -79,7 +82,8 @@ public class SyncServer implements AutoCloseable {
         private Path pluginsDirectory;
         private Path statusFile = Paths.get("syncStatuses.json");
         private Path staticFiles;
-        private String title = DEFAULT_TITLE;
+        private String title;
+        private Function<String, Map<String, String>> translations = language -> Map.of();
         private final List<SyncPlugin> plugins = new ArrayList<>();
 
         private Builder(SyncWebConfig config) {
@@ -171,11 +175,24 @@ public class SyncServer implements AutoCloseable {
 
         /**
          * Sets the title of the web page (it is displayed at the top of the page and is the title of the browser tab).
+         * <br>This title is not translated. To translate it, give the <code>app.title</code> key to {@link #translations(Function)} instead.
          * @param title the title ({@value SyncServer#DEFAULT_TITLE} by default)
          * @return this
          */
         public Builder title(String title) {
             this.title = Objects.requireNonNull(title);
+            return this;
+        }
+
+        /**
+         * Sets the translations of the application (they complete the ones of the page and of the plugins, and replace them if they have the same keys).
+         * <br>The page is displayed in the language of the user if it has translations for it (see {@link com.fathzer.sync4j.web.i18n.Translations}), in English otherwise.
+         * The key <code>app.title</code> is the title of the page when {@link #title(String)} is not used.
+         * @param translations a function that gives the translations of a language (<code>fr</code>) by key
+         * @return this
+         */
+        public Builder translations(Function<String, Map<String, String>> translations) {
+            this.translations = Objects.requireNonNull(translations);
             return this;
         }
 
@@ -228,6 +245,7 @@ public class SyncServer implements AutoCloseable {
 
     private final SyncWebConfig config;
     private final String title;
+    private final I18n i18n;
     private final Javalin app;
     private final LoginManager loginManager;
     private final SynchronizationManager manager;
@@ -247,6 +265,11 @@ public class SyncServer implements AutoCloseable {
     private SyncServer(Builder builder) throws IOException {
         this.config = builder.config;
         this.title = builder.title;
+        this.i18n = new I18n(() -> {
+            final List<Function<String, Map<String, String>>> sources = new ArrayList<>(plugins.stream().<Function<String, Map<String, String>>>map(plugin -> plugin::translations).toList());
+            sources.add(builder.translations);
+            return sources;
+        });
         if (config.synchronization().libraries().isEmpty()) {
             throw new IllegalArgumentException("No libraries specified");
         }
@@ -301,8 +324,12 @@ public class SyncServer implements AutoCloseable {
     }
 
     private void registerRoutes(RoutesConfig routes) {
-        // The page needs its title to display the login form
-        routes.get("/api/ui", ctx -> ctx.json(Map.of("title", title)));
+        // The page needs its title and its translations to display the login form
+        routes.get("/api/ui", ctx -> ctx.json(Map.of("title", title(language(ctx)))));
+        routes.get("/api/i18n", ctx -> {
+            final String language = language(ctx);
+            ctx.json(Map.of("language", language, "messages", i18n.messages(language)));
+        });
         new LoginRestService(loginManager).registerRoutes(routes, "/api/login");
         new SyncRestService(manager, loginManager, this::check).registerRoutes(routes, "/api/libraries");
         final String wsPath = "/ws/sync/{" + SyncWsService.LIBRARY_ID_PARAM + "}";
@@ -315,6 +342,16 @@ public class SyncServer implements AutoCloseable {
         });
         routes.ws(wsPath, wsService.setConfig());
         wsService.start();
+    }
+
+    private String language(io.javalin.http.Context ctx) {
+        // The answer depends on the language of the browser
+        ctx.header("Vary", "Accept-Language");
+        return i18n.language(ctx.queryParam("lang"), ctx.header("Accept-Language"));
+    }
+
+    private String title(String language) {
+        return title != null ? title : i18n.messages(language).getOrDefault("app.title", DEFAULT_TITLE);
     }
 
     private void initPlugins(Builder builder, RoutesConfig routes) throws IOException {
@@ -348,7 +385,7 @@ public class SyncServer implements AutoCloseable {
                 plugin.check(library).forEach(message -> warnings.add(new LibraryWarning(plugin.id(), message)));
             } catch (IOException | RuntimeException e) {
                 log.warn("Plugin {} can't check the library {}", plugin.id(), library.id(), e);
-                warnings.add(new LibraryWarning(plugin.id(), "The library can't be checked: " + e.getMessage()));
+                warnings.add(new LibraryWarning(plugin.id(), Message.of("check.failed", "The library can't be checked: {0}", e.getMessage())));
             }
         }
         return warnings;

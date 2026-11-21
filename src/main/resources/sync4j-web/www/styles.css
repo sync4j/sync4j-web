@@ -678,6 +678,16 @@ header h1 {
     .form-actions {
         flex-direction: column;
     }
+
+    /* A single button saves some height: Start, or Stop while the library is synchronizing */
+    .form-actions .btn-danger,
+    .form-actions.running .btn-primary {
+        display: none;
+    }
+
+    .form-actions.running .btn-danger {
+        display: block;
+    }
     
     .btn {
         width: 100%;

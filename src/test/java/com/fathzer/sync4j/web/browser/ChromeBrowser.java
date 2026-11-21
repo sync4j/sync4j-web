@@ -283,9 +283,15 @@ final class ChromeBrowser implements AutoCloseable {
                 .map(e -> e.path("params").path("exceptionDetails").path("exception").path("description").asText(e.path("params").path("exceptionDetails").path("text").asText())).toList();
     }
 
-    /** Forgets the cookies and the local storage, so a test does not depend on the previous one. */
+    /** Sets the languages that the browser asks the servers for (the Accept-Language header), as the language of the system does. Chrome adds the weights (q=...) itself. */
+    void setAcceptLanguage(String languages) {
+        send("Network.setUserAgentOverride", MAPPER.createObjectNode().put("userAgent", text("navigator.userAgent")).put("acceptLanguage", languages));
+    }
+
+    /** Forgets the cookies and the local storage, and goes back to English, so a test does not depend on the previous one. */
     void reset(String origin) {
         navigate("about:blank");
+        setAcceptLanguage("en-US,en");
         send("Network.clearBrowserCookies");
         send("Storage.clearDataForOrigin", MAPPER.createObjectNode().put("origin", origin).put("storageTypes", "all"));
     }

@@ -82,14 +82,14 @@ class SynchronizationUI {
 
     async startSync() {
         if (!this.currentLibrary) {
-            this.syncForm.showError('Please select a library first');
+            this.syncForm.showError(i18n.t('sync.selectFirst', 'Please select a library first'));
             return;
         }
 
         this.syncProgress.showProgressSection();
-        this.syncProgress.showStatus('Starting sync...', 'info');
-        this.syncProgress.addLog('Connecting to sync service...');
-        this.syncProgress.addLog(`Checksum verification: ${this.syncForm.useChecksum.checked ? 'enabled' : 'disabled'}`);
+        this.syncProgress.showStatus(i18n.t('sync.starting', 'Starting sync...'), 'info');
+        this.syncProgress.addLog(i18n.t('log.connecting', 'Connecting to sync service...'));
+        this.syncProgress.addLog(this.syncForm.useChecksum.checked ? i18n.t('log.checksumOn', 'Checksum verification: enabled') : i18n.t('log.checksumOff', 'Checksum verification: disabled'));
 
         // Then start the sync
         this.lastStatus = null;
@@ -106,18 +106,18 @@ class SynchronizationUI {
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.error || 'Failed to start sync');
+            throw new Error(error.error || i18n.t('sync.startFailedShort', 'Failed to start sync'));
         }
 
         // A short synchronization can be over before the answer to the request is received: its final status should not be replaced
         if (!this.isFinished(this.lastStatus)) {
-            this.syncProgress.showStatus('Sync started successfully', 'success');
+            this.syncProgress.showStatus(i18n.t('sync.started', 'Sync started successfully'), 'success');
         }
     }
 
     async stopSync() {
         if (!this.currentLibrary) {
-            this.syncProgress.showStatus('No active sync session', 'error');
+            this.syncProgress.showStatus(i18n.t('sync.noSession', 'No active sync session'), 'error');
             return;
         }
 
@@ -131,16 +131,16 @@ class SynchronizationUI {
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.error || 'Failed to stop sync');
+                throw new Error(error.error || i18n.t('sync.stopFailedShort', 'Failed to stop sync'));
             }
 
             // The WebSocket will notify us when the sync is actually cancelled
-            this.syncProgress.showStatus('Stopping sync...', 'warning');
-            this.syncProgress.addLog('Requesting sync cancellation...');
+            this.syncProgress.showStatus(i18n.t('sync.stopping', 'Stopping sync...'), 'warning');
+            this.syncProgress.addLog(i18n.t('log.cancelling', 'Requesting sync cancellation...'));
 
         } catch (error) {
             console.error('Failed to stop sync:', error);
-            this.syncProgress.showStatus('Failed to stop sync: ' + error.message, 'error');
+            this.syncProgress.showStatus(i18n.t('sync.stopFailed', 'Failed to stop sync: {0}', error.message), 'error');
         }
     }
 
@@ -173,7 +173,7 @@ class SynchronizationUI {
     onWebSocketOpen() {
         console.log(`WebSocket connected for library: ${this.currentLibrary}`);
         this.resetReconnectState();
-        this.syncProgress.showStatus('Connected to sync service', 'success');
+        this.syncProgress.showStatus(i18n.t('sync.connected', 'Connected to sync service'), 'success');
     }
 
     onWebSocketMessage(event) {
@@ -217,7 +217,7 @@ class SynchronizationUI {
     attemptReconnect() {
         const delay = this.getReconnectDelay();
         const delaySeconds = delay / 1000;
-        const message = `Connection lost. Attempting to reconnect in ${delaySeconds}s...`;
+        const message = i18n.t('sync.connectionLost', 'Connection lost. Attempting to reconnect in {0}s...', delaySeconds);
         this.syncForm.showError(message);
         
         this.reconnectTimeout = setTimeout(() => {
@@ -322,12 +322,15 @@ import { SyncProgress } from './js/sync-progress.js';
 import { authenticatedFetch } from './js/http.js';
 
 // The title of the page is set by the server (it does not need the user to be logged in: the login form is displayed with it)
-fetch('/api/ui').then(response => response.ok ? response.json() : null).then(ui => {
+i18n.ready.then(() => fetch('/api/ui')).then(response => response.ok ? response.json() : null).then(ui => {
     if (ui?.title) {
         document.title = ui.title;
         document.getElementById('appTitle').textContent = ui.title;
     }
 }).catch(error => console.error('Failed to load the title of the page:', error));
+
+// The texts of the page are in the language of the user before the components are created
+await i18n.ready;
 
 // The application is created once the page is loaded, but it only loads its data when the user is logged in
 const app = new SynchronizationUI();

@@ -23,15 +23,15 @@ class ProgressBlock {
             </div>
             <div class="stats-row">
                 <div class="stat-field">
-                    <span class="stat-label">PROCESSED</span>
+                    <span class="stat-label">${i18n.t('progress.processed', 'PROCESSED')}</span>
                     <span id="${idPrefix}Processed" class="stat-value">${formatValue(0)}</span>
                 </div>
                 <div class="stat-field">
-                    <span class="stat-label">TOTAL</span>
+                    <span class="stat-label">${i18n.t('progress.total', 'TOTAL')}</span>
                     <span id="${idPrefix}Total" class="stat-value">${formatValue(0)}</span>
                 </div>
                 <div class="stat-field">
-                    <span class="stat-label">SPEED</span>
+                    <span class="stat-label">${i18n.t('progress.speed', 'SPEED')}</span>
                     <span id="${idPrefix}Speed" class="stat-value">${formatValue(0)}/s</span>
                 </div>
                 ${idPrefix === 'checks' ? '<span id="checksProgress" class="visually-hidden">0 / 0 files checked</span>' : ''}
@@ -94,19 +94,21 @@ class ProgressBlock {
     }
 }
 
+// The labels of the states (the keys of their translations are state.<STATE>)
 const PLUGIN_STATES = {
     RUNNING: 'In progress',
     DONE: 'Done',
     FAILED: 'Failed',
     UNKNOWN: 'Unknown'
 };
+const stateLabel = (state) => i18n.t(`state.${state}`, PLUGIN_STATES[state]);
 
 // The state of the card of the synchronization, according to the status of the library
 const SYNC_STATES = {
-    SYNCING: { css: 'running', label: 'In progress' },
-    COMPLETED: { css: 'done', label: 'Done' },
-    FAILED: { css: 'failed', label: 'Failed' },
-    CANCELLED: { css: 'cancelled', label: 'Cancelled' }
+    SYNCING: { css: 'running', label: 'In progress', key: 'state.RUNNING' },
+    COMPLETED: { css: 'done', label: 'Done', key: 'state.DONE' },
+    FAILED: { css: 'failed', label: 'Failed', key: 'state.FAILED' },
+    CANCELLED: { css: 'cancelled', label: 'Cancelled', key: 'state.CANCELLED' }
 };
 
 /**
@@ -152,20 +154,21 @@ class PluginCards {
     }
 
     fill(card, pluginId, data) {
-        card.title.textContent = data.label || pluginId;
+        card.title.textContent = i18n.text(data.label) || pluginId;
 
         const state = String(data.state ?? '').toUpperCase();
         const known = Object.hasOwn(PLUGIN_STATES, state);
         card.element.className = `plugin-card state-${known ? state.toLowerCase() : 'unknown'}`;
-        card.badge.textContent = known ? PLUGIN_STATES[state] : (state ? state : '');
+        card.badge.textContent = known ? stateLabel(state) : (state ? state : '');
         card.badge.style.display = known || state ? '' : 'none';
 
-        card.message.textContent = data.message ?? '';
-        card.message.style.display = data.message ? '' : 'none';
+        const message = i18n.text(data.message);
+        card.message.textContent = message;
+        card.message.style.display = message ? '' : 'none';
 
         card.details.replaceChildren(...(Array.isArray(data.details) ? data.details : []).map(text => {
             const item = document.createElement('li');
-            item.textContent = String(text);
+            item.textContent = i18n.text(text);
             return item;
         }));
         card.details.style.display = card.details.children.length > 0 ? '' : 'none';
@@ -199,13 +202,13 @@ export class SyncProgress {
         
         // Create progress blocks
         this.checksBlock = ProgressBlock.createProgressBlock(this.progressContent, {
-            title: 'Checked Files',
+            title: i18n.t('progress.checked', 'Checked Files'),
             idPrefix: 'checks',
             formatValue: (n) => `${n}`
         });
 
         this.bytesBlock = ProgressBlock.createProgressBlock(this.progressContent, {
-            title: 'Copied Bytes',
+            title: i18n.t('progress.copied', 'Copied Bytes'),
             idPrefix: 'bytes',
             formatValue: (n) => this.formatBytes(n)
         });
@@ -259,7 +262,7 @@ export class SyncProgress {
         const state = SYNC_STATES[status];
         this.progressSection.classList.remove(...Object.values(SYNC_STATES).map(s => `state-${s.css}`));
         if (this.progressBadge) {
-            this.progressBadge.textContent = state ? state.label : '';
+            this.progressBadge.textContent = state ? i18n.t(state.key, state.label) : '';
             this.progressBadge.style.display = state ? '' : 'none';
         }
         if (state) {
@@ -287,19 +290,20 @@ export class SyncProgress {
     }
 
     handleSyncCompletion(data) {
-        this.showStatus('Sync completed successfully', 'success');
-        this.addLog('Sync completed successfully');
+        const message = i18n.t('sync.completed', 'Sync completed successfully');
+        this.showStatus(message, 'success');
+        this.addLog(message);
     }
 
     handleSyncError(data) {
-        const errorMessage = data.errorMessage || 'An error occurred during sync';
-        this.showStatus(`Sync failed: ${errorMessage}`, 'error');
-        this.addLog(`Error: ${errorMessage}`);
+        const errorMessage = data.errorMessage || i18n.t('sync.error', 'An error occurred during sync');
+        this.showStatus(i18n.t('sync.failed', 'Sync failed: {0}', errorMessage), 'error');
+        this.addLog(i18n.t('log.error', 'Error: {0}', errorMessage));
     }
 
     handleSyncCancellation(data) {
-        this.showStatus('Sync was cancelled', 'warning');
-        this.addLog('Sync was cancelled by user');
+        this.showStatus(i18n.t('sync.cancelled', 'Sync was cancelled'), 'warning');
+        this.addLog(i18n.t('log.cancelled', 'Sync was cancelled by user'));
     }
 
     /**
@@ -308,8 +312,9 @@ export class SyncProgress {
      */
     handlePluginMessage(pluginId, data) {
         if (!data) return;
-        if (data.message) {
-            this.addLog(`[${pluginId}] ${data.message}`);
+        const message = i18n.text(data.message);
+        if (message) {
+            this.addLog(`[${pluginId}] ${message}`);
         }
         if (data.state || data.progress || data.details) {
             this.pluginCards.update(pluginId, data);

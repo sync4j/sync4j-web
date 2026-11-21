@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,16 +15,16 @@
     <div class="container" id="app-content" style="display: none;">
         <header>
             <h1 id="appTitle"></h1>
-            <a href="#" class="logout-button" id="logout-button">Logout</a>
+            <a href="#" class="logout-button" id="logout-button" data-i18n="logout">Logout</a>
         </header>
 
         <main>
             <div class="sync-form">
                 <div class="form-group">
-                    <label for="librarySelect">Select Library:</label>
+                    <label for="librarySelect" data-i18n="form.library">Select Library:</label>
                     <div class="library-select-container">
                         <select id="librarySelect">
-                            <option value="">Loading libraries...</option>
+                            <option value="" data-i18n="form.loading">Loading libraries...</option>
                         </select>
                         <div id="libraryStatus" class="library-status">
                             <span class="status-indicator" id="statusIndicator"></span>
@@ -34,35 +34,35 @@
                     <div id="errorMessage" class="error-message"></div>
                     <div id="libraryWarnings" class="library-warnings" style="display: none;">
                         <ul id="libraryWarningsList"></ul>
-                        <button id="recheckBtn" class="btn btn-secondary" type="button">Check again</button>
+                        <button id="recheckBtn" class="btn btn-secondary" type="button" data-i18n="form.checkAgain">Check again</button>
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label for="suffixPath">Suffix Path (optional):</label>
-                    <input type="text" id="suffixPath" placeholder="e.g., subfolder/path">
+                    <label for="suffixPath" data-i18n="form.suffix">Suffix Path (optional):</label>
+                    <input type="text" id="suffixPath" placeholder="e.g., subfolder/path" data-i18n-placeholder="form.suffix.placeholder">
                 </div>
 
                 <div class="form-group checkbox-group">
                     <label>
                         <input type="checkbox" id="useChecksum">
-                        Use Checksum Verification
+                        <span data-i18n="form.checksum">Use Checksum Verification</span>
                     </label>
                 </div>
 
                 <div class="form-actions">
-                    <button id="startBtn" class="btn btn-primary">Start Synchronization</button>
-                    <button id="stopBtn" class="btn btn-danger" disabled>Stop Synchronization</button>
+                    <button id="startBtn" class="btn btn-primary" data-i18n="form.start">Start Synchronization</button>
+                    <button id="stopBtn" class="btn btn-danger" disabled data-i18n="form.stop">Stop Synchronization</button>
                 </div>
             </div>
 
             <div class="progress-section" style="display: none;">
                 <div class="progress-header">
                     <div class="header-title">
-                        <h2>Synchronization</h2>
+                        <h2 data-i18n="progress.title">Synchronization</h2>
                         <span id="progressBadge" class="badge" style="display: none;"></span>
                     </div>
-                    <button id="toggleProgressSection" class="toggle-button" title="Collapse/Expand">
+                    <button id="toggleProgressSection" class="toggle-button" title="Collapse/Expand" data-i18n-title="toggle">
                         <span class="arrow"></span>
                     </button>
                 </div>
@@ -82,8 +82,8 @@
             <!-- The technical log, collapsed by default -->
             <div id="logSection" class="log-section collapsed" style="display: none;">
                 <div class="progress-header">
-                    <h2>Technical log</h2>
-                    <button id="toggleLogSection" class="toggle-button" title="Collapse/Expand">
+                    <h2 data-i18n="log.title">Technical log</h2>
+                    <button id="toggleLogSection" class="toggle-button" title="Collapse/Expand" data-i18n-title="toggle">
                         <span class="arrow"></span>
                     </button>
                 </div>
@@ -94,6 +94,7 @@
         </main>
     </div>
 
+    <script src="js/i18n.js"></script>
     <script src="js/auth.js"></script>
     <script type="module" src="script.js">
         // Logout button handling

@@ -5,4 +5,4 @@ package com.fathzer.sync4j.web.plugin;
  * @param plugin the id of the plugin
  * @param message the message displayed to the user
  */
-public record LibraryWarning(String plugin, String message) {}
+public record LibraryWarning(String plugin, Message message) {}

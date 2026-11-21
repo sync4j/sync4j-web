@@ -48,7 +48,9 @@ public interface PluginContext {
      * <li><code>details</code>: an array of sentences, displayed as a list in the card.</li>
      * <li><code>progress</code>: an object with <code>done</code> and <code>total</code>, displayed as a progress bar in the card.</li>
      * </ul>
-     * The card of a plugin is displayed as soon as a message has a <code>state</code>, <code>details</code> or a <code>progress</code>. It is meant for the end user:
+     * <br>The texts (<code>message</code>, <code>label</code> and the items of <code>details</code>) are strings, or {@link Message}s that the page translates into the language of the user
+     * (see {@link SyncPlugin#translations(String)}). A message can have messages as arguments.
+     * <br>The card of a plugin is displayed as soon as a message has a <code>state</code>, <code>details</code> or a <code>progress</code>. It is meant for the end user:
      * it tells what the plugin does. The technical log is for the details that only the administrator needs.
      * <br>A message that has a <code>state</code> is the current state of the plugin for the library: the last one is kept, and sent to the clients that connect later
      * (for instance, a user that loads the page again) until the next synchronization of the library starts.
