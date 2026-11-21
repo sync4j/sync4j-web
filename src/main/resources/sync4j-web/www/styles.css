@@ -1,3 +1,73 @@
+/* Colors: the dark ones are used if the system asks for a dark theme */
+:root {
+    color-scheme: light dark;
+    --bg: #f5f7fa;
+    --text: #333;
+    --text-muted: #555;
+    --label: #7f8c8d;
+    --heading: #2c3e50;
+    --card-bg: white;
+    --shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    --divider: #ecf0f1;
+    --surface: #f8f9fa;
+    --track: #ecf0f1;
+    --hover: #f0f0f0;
+    --input-bg: white;
+    --input-border: #e1e8ed;
+    --disabled-bg: #bdc3c7;
+    --ok-bg: #d4edda;
+    --ok-text: #155724;
+    --ok-border: #c3e6cb;
+    --error-bg: #f8d7da;
+    --error-text: #721c24;
+    --error-border: #f5c6cb;
+    --info-bg: #cce7ff;
+    --info-text: #004085;
+    --info-border: #b3d7ff;
+    --warn-bg: #fff6e0;
+    --warn-text: #7a5200;
+    --warn-border: #f0c36d;
+    --error-color: #e74c3c;
+    --login-bg: #f8f9fa;
+    --log-bg: #2c3e50;
+    --log-text: #ecf0f1;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #12161c;
+        --text: #e1e6ec;
+        --text-muted: #aab4c0;
+        --label: #93a0ae;
+        --heading: #eef2f6;
+        --card-bg: #1c232c;
+        --shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+        --divider: #2c3642;
+        --surface: #242d38;
+        --track: #2c3642;
+        --hover: #2c3642;
+        --input-bg: #141a21;
+        --input-border: #3a4655;
+        --disabled-bg: #3a4655;
+        --ok-bg: #16351f;
+        --ok-text: #8fe0a4;
+        --ok-border: #24593a;
+        --error-bg: #3a1d21;
+        --error-text: #f1a7ae;
+        --error-border: #6a2b32;
+        --info-bg: #14304f;
+        --info-text: #9cc9f5;
+        --info-border: #24507f;
+        --warn-bg: #3b2f12;
+        --warn-text: #f2d48a;
+        --warn-border: #6b5520;
+        --error-color: #ff7b6e;
+        --login-bg: #1c232c;
+        --log-bg: #0c1015;
+        --log-text: #d5dde6;
+    }
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -6,8 +76,8 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background-color: #f5f7fa;
-    color: #333;
+    background-color: var(--bg);
+    color: var(--text);
     line-height: 1.6;
 }
 
@@ -18,21 +88,42 @@ body {
 }
 
 header {
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     margin-bottom: 30px;
 }
 
 header h1 {
-    color: #2c3e50;
-    font-size: 2.5rem;
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: center;
+    overflow-wrap: anywhere;
+    color: var(--heading);
+    font-size: clamp(1.5rem, 6vw, 2.5rem);
     font-weight: 300;
 }
 
+.logout-button {
+    flex: 0 0 auto;
+    padding: 8px 15px;
+    background-color: #C62828;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.logout-button:hover {
+    background-color: #d32f2f;
+}
+
 .sync-form {
-    background: white;
+    background: var(--card-bg);
     padding: 30px;
     border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow);
     margin-bottom: 30px;
 }
 
@@ -44,7 +135,7 @@ header h1 {
     display: block;
     margin-bottom: 5px;
     font-weight: 500;
-    color: #555;
+    color: var(--text-muted);
 }
 
 .library-select-container {
@@ -91,7 +182,7 @@ header h1 {
 }
 
 .error-message {
-    color: #e74c3c;
+    color: var(--error-color);
     font-size: 0.85em;
     margin-top: 5px;
     min-height: 1.2em;
@@ -100,10 +191,10 @@ header h1 {
 .library-warnings {
     margin-top: 8px;
     padding: 8px 12px;
-    background: #fff6e0;
-    border: 1px solid #f0c36d;
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
     border-radius: 4px;
-    color: #7a5200;
+    color: var(--warn-text);
     font-size: 0.9em;
 }
 
@@ -127,7 +218,9 @@ header h1 {
 .form-group input[type="text"] {
     width: 100%;
     padding: 12px;
-    border: 2px solid #e1e8ed;
+    border: 2px solid var(--input-border);
+    background-color: var(--input-bg);
+    color: var(--text);
     border-radius: 6px;
     font-size: 14px;
     transition: border-color 0.3s ease;
@@ -200,7 +293,7 @@ header h1 {
 }
 
 .btn:disabled {
-    background-color: #bdc3c7;
+    background-color: var(--disabled-bg);
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
@@ -208,9 +301,10 @@ header h1 {
 
 .progress-section {
     margin-top: 30px;
-    background: white;
+    border-left: 4px solid var(--label);
+    background: var(--card-bg);
     border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--shadow);
     overflow: hidden;
 }
 
@@ -223,6 +317,13 @@ header h1 {
 
 .progress-header h2 {
     margin: 0;
+}
+
+.header-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
 }
 
 .toggle-button {
@@ -238,7 +339,7 @@ header h1 {
 }
 
 .toggle-button:hover {
-    background-color: #f0f0f0;
+    background-color: var(--hover);
 }
 
 .arrow {
@@ -247,7 +348,7 @@ header h1 {
     height: 0;
     border-left: 6px solid transparent;
     border-right: 6px solid transparent;
-    border-top: 6px solid #555;
+    border-top: 6px solid var(--text-muted);
     transition: transform 0.3s ease;
 }
 
@@ -270,21 +371,12 @@ header h1 {
 .progress-block h3 {
     margin: 0 0 10px;
     font-size: 1rem;
-    color: #2c3e50;
+    color: var(--heading);
     font-weight: 600;
 }
 
-.progress-section.completed {
-    border-left: 4px solid #2ecc71;
-}
-
-.progress-section.failed,
-.progress-section.cancelled {
-    border-left-color: #e74c3c;
-}
-
 .progress-section h2 {
-    color: #2c3e50;
+    color: var(--heading);
     margin-bottom: 20px;
     font-weight: 400;
 }
@@ -300,7 +392,7 @@ header h1 {
     width: 100%;
     flex: 1 1 auto;
     height: 20px;
-    background-color: #ecf0f1;
+    background-color: var(--track);
     border-radius: 10px;
     overflow: hidden;
     position: relative;
@@ -319,7 +411,7 @@ header h1 {
     margin-top: 0;
     font-weight: 600;
     font-size: 18px;
-    color: #2c3e50;
+    color: var(--heading);
 }
 
 .stats-grid {
@@ -337,14 +429,14 @@ header h1 {
 }
 
 .stat-item {
-    background-color: #f8f9fa;
+    background-color: var(--surface);
     padding: 15px;
     border-radius: 8px;
     border-left: 4px solid #3498db;
 }
 
 .stat-field {
-    background-color: #f8f9fa;
+    background-color: var(--surface);
     padding: 12px;
     border-radius: 8px;
     border-left: 4px solid #3498db;
@@ -353,7 +445,7 @@ header h1 {
 .stat-label {
     display: block;
     font-size: 12px;
-    color: #7f8c8d;
+    color: var(--label);
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin-bottom: 5px;
@@ -363,11 +455,11 @@ header h1 {
     display: block;
     font-size: 16px;
     font-weight: 600;
-    color: #2c3e50;
+    color: var(--heading);
 }
 
 .status-section {
-    border-top: 1px solid #ecf0f1;
+    border-top: 1px solid var(--divider);
     padding-top: 20px;
 }
 
@@ -380,41 +472,170 @@ header h1 {
 }
 
 .status-message.success {
-    background-color: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
+    background-color: var(--ok-bg);
+    color: var(--ok-text);
+    border: 1px solid var(--ok-border);
     display: block;
 }
 
 .status-message.error {
-    background-color: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
+    background-color: var(--error-bg);
+    color: var(--error-text);
+    border: 1px solid var(--error-border);
     display: block;
 }
 
 .status-message.info {
-    background-color: #cce7ff;
-    color: #004085;
-    border: 1px solid #b3d7ff;
+    background-color: var(--info-bg);
+    color: var(--info-text);
+    border: 1px solid var(--info-border);
     display: block;
 }
 
 .log-output {
-    background-color: #2c3e50;
-    color: #ecf0f1;
+    background-color: var(--log-bg);
+    color: var(--log-text);
     padding: 15px;
     border-radius: 6px;
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
     font-size: 12px;
-    max-height: 200px;
+    max-height: 300px;
     overflow-y: auto;
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* The technical log has its own card, that is collapsed by default */
+.log-section {
+    margin-top: 30px;
+    background: var(--card-bg);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+
+.log-section h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 400;
+    color: var(--heading);
+}
+
+.log-content {
+    padding: 15px 20px 20px;
+}
+
+.log-section.collapsed .log-content {
     display: none;
 }
 
-.log-output.show {
-    display: block;
+.log-section .progress-header {
+    padding-bottom: 15px;
+}
+
+.log-section.collapsed .progress-header {
+    padding-bottom: 20px;
+}
+
+/* The cards of the plugins: what a plugin does, for the end user */
+.plugin-card {
+    margin-top: 30px;
+    padding: 20px;
+    background: var(--card-bg);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    border-left: 4px solid var(--label);
+}
+
+/* The colored edge of the cards (the card of the synchronization and the ones of the plugins) tells the state */
+.plugin-card.state-running,
+.progress-section.state-running {
+    border-left-color: #0c70e0;
+}
+
+.plugin-card.state-done,
+.progress-section.state-done {
+    border-left-color: #2ecc70;
+}
+
+.plugin-card.state-failed,
+.progress-section.state-failed {
+    border-left-color: #e41c06;
+}
+
+.progress-section.state-cancelled {
+    border-left-color: #f0a000;
+}
+
+.plugin-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.plugin-card-header h2 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 400;
+    color: var(--heading);
+}
+
+.badge {
+    flex: 0 0 auto;
+    padding: 3px 12px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background-color: var(--track);
+    color: var(--text-muted);
+}
+
+.state-running .badge {
+    background-color: var(--info-bg);
+    color: var(--info-text);
+    animation: pulse 1.5s infinite;
+}
+
+.state-done .badge {
+    background-color: var(--ok-bg);
+    color: var(--ok-text);
+}
+
+.state-failed .badge {
+    background-color: var(--error-bg);
+    color: var(--error-text);
+}
+
+.state-unknown .badge,
+.state-cancelled .badge {
+    background-color: var(--warn-bg);
+    color: var(--warn-text);
+}
+
+.plugin-card-message {
+    margin-bottom: 10px;
+}
+
+.plugin-card-details {
+    margin: 0 0 12px;
+    padding-left: 20px;
+    color: var(--text-muted);
+    font-size: 0.9em;
+}
+
+.plugin-card-progress {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.plugin-card-progress-text {
+    flex: 0 0 auto;
+    font-weight: 600;
+    font-size: 0.9em;
+    color: var(--heading);
 }
 
 .visually-hidden {
@@ -435,10 +656,23 @@ header h1 {
     .container {
         padding: 10px;
     }
+
+    header {
+        margin-bottom: 20px;
+    }
+
+    .logout-button {
+        padding: 6px 10px;
+        font-size: 0.9em;
+    }
     
     .sync-form,
     .progress-section {
         padding: 20px;
+    }
+
+    .plugin-card {
+        padding: 15px;
     }
     
     .form-actions {

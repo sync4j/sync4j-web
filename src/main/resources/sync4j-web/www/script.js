@@ -1,6 +1,5 @@
 class SynchronizationUI {
     currentLibrary = null;
-    isRunning = false;
     websocket = null;
     statusTimer = null;
     reconnectTimeout = null;
@@ -33,9 +32,10 @@ class SynchronizationUI {
         this.disconnectWebSocket();
         this.resetReconnectState();
         this.currentLibrary = null;
-        this.isRunning = false;
+        this.syncProgress.hideProgressSection();
         this.syncForm.clearError();
         this.syncForm.clearWarnings();
+        this.syncProgress.clearPluginData();
     }
 
     // Initialize the component asynchronously
@@ -109,7 +109,6 @@ class SynchronizationUI {
             throw new Error(error.error || 'Failed to start sync');
         }
 
-        this.isRunning = true;
         // A short synchronization can be over before the answer to the request is received: its final status should not be replaced
         if (!this.isFinished(this.lastStatus)) {
             this.syncProgress.showStatus('Sync started successfully', 'success');
@@ -193,7 +192,8 @@ class SynchronizationUI {
         }
         console.log(`WebSocket closed for library: ${this.currentLibrary}`, event);
         // The server refuses the connection if the user is not logged in: no need to try again, the user has to log in
-        if (!await this.isSessionValid() || !this.isRunning) {
+        // Whatever the page does, it has to know how the library evolves (a synchronization can be started by another user or another tab)
+        if (!await this.isSessionValid()) {
             return;
         }
         this.syncForm.reset()
@@ -300,9 +300,12 @@ class SynchronizationUI {
     }
     
     resetUI() {
-        this.isRunning = false;
         this.syncForm.reset();
+        // The card of the synchronization is the one of the previous library (it is displayed again if the new library has a synchronization to show)
+        this.syncProgress.hideProgressSection();
         this.syncForm.clearWarnings();
+        // What the plugins displayed is about the previous library
+        this.syncProgress.clearPluginData();
         this.syncProgress.resetStatusIndicators();
     }
     
@@ -317,6 +320,14 @@ class SynchronizationUI {
 import { SyncForm } from './js/sync-form.js';
 import { SyncProgress } from './js/sync-progress.js';
 import { authenticatedFetch } from './js/http.js';
+
+// The title of the page is set by the server (it does not need the user to be logged in: the login form is displayed with it)
+fetch('/api/ui').then(response => response.ok ? response.json() : null).then(ui => {
+    if (ui?.title) {
+        document.title = ui.title;
+        document.getElementById('appTitle').textContent = ui.title;
+    }
+}).catch(error => console.error('Failed to load the title of the page:', error));
 
 // The application is created once the page is loaded, but it only loads its data when the user is logged in
 const app = new SynchronizationUI();

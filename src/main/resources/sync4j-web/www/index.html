@@ -13,9 +13,9 @@
 </head>
 <body>
     <div class="container" id="app-content" style="display: none;">
-        <a href="#" class="logout-button" id="logout-button">Logout</a>
         <header>
-            <h1>Synchronization Dashboard</h1>
+            <h1 id="appTitle"></h1>
+            <a href="#" class="logout-button" id="logout-button">Logout</a>
         </header>
 
         <main>
@@ -58,7 +58,10 @@
 
             <div class="progress-section" style="display: none;">
                 <div class="progress-header">
-                    <h2>Synchronization Progress</h2>
+                    <div class="header-title">
+                        <h2>Synchronization</h2>
+                        <span id="progressBadge" class="badge" style="display: none;"></span>
+                    </div>
                     <button id="toggleProgressSection" class="toggle-button" title="Collapse/Expand">
                         <span class="arrow"></span>
                     </button>
@@ -70,6 +73,21 @@
 
                 <div class="status-section">
                     <div id="statusMessage" class="status-message"></div>
+                </div>
+            </div>
+
+            <!-- What the plugins do, for the end user (one card per plugin, added by the script) -->
+            <div id="pluginCards"></div>
+
+            <!-- The technical log, collapsed by default -->
+            <div id="logSection" class="log-section collapsed" style="display: none;">
+                <div class="progress-header">
+                    <h2>Technical log</h2>
+                    <button id="toggleLogSection" class="toggle-button" title="Collapse/Expand">
+                        <span class="arrow"></span>
+                    </button>
+                </div>
+                <div class="log-content">
                     <div id="logOutput" class="log-output"></div>
                 </div>
             </div>

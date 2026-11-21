@@ -18,6 +18,7 @@ import io.javalin.websocket.WsContext;
 /**
  * The WebSocket endpoint that sends the progress, the status of the synchronization of a library and the messages of the plugins to the clients that watch it.
  * <br>The endpoint has a <code>libraryId</code> path parameter.
+ * <br>The messages of the plugins that have a <code>state</code> are kept (the last one of each plugin for a library, until the next synchronization of the library starts) and sent to the clients that connect later.
  * <br>The messages have a <code>type</code> attribute: PROGRESS (data is the statistics), STATUS (data is the status) or PLUGIN (see {@link com.fathzer.sync4j.web.plugin.PluginContext#publish(String, Object)}).
  */
 public class SyncWsService extends AbstractWebSocketService implements SyncBroadcaster {
@@ -31,6 +32,7 @@ public class SyncWsService extends AbstractWebSocketService implements SyncBroad
     public static final String LIBRARY_ID_PARAM = "libraryId";
 
     private final Map<String, Set<WsContext>> libraryConnections = new ConcurrentHashMap<>();
+    private final Object pluginStatesLock = new Object();
     private final SynchronizationManager manager;
 
     /**
@@ -44,9 +46,13 @@ public class SyncWsService extends AbstractWebSocketService implements SyncBroad
     @Override
     protected void onConnect(WsConnectContext ctx) {
         final String libraryId = ctx.pathParam(LIBRARY_ID_PARAM);
-        libraryConnections.computeIfAbsent(libraryId, k -> new CopyOnWriteArraySet<>()).add(ctx);
         log.debug("WebSocket connected for library: {}", libraryId);
         ctx.send(message(MessageType.STATUS, manager.getSyncStatus(libraryId)));
+        synchronized (pluginStatesLock) {
+            // The client has to see what the plugins say now (a synchronization can be over for a while, but not what the plugins do after it)
+            libraryConnections.computeIfAbsent(libraryId, k -> new CopyOnWriteArraySet<>()).add(ctx);
+            manager.getPluginStates(libraryId).forEach((pluginId, data) -> ctx.send(pluginMessage(libraryId, pluginId, data)));
+        }
     }
 
     @Override
@@ -76,10 +82,25 @@ public class SyncWsService extends AbstractWebSocketService implements SyncBroad
 
     @Override
     public void broadcast(String libraryId, String pluginId, Object data) {
+        final Map<String, Object> message = pluginMessage(libraryId, pluginId, data);
+        if (data instanceof Map<?, ?> map && map.containsKey("state")) {
+            // The state of the plugin is kept (and saved), to be sent to the clients that connect later
+            synchronized (pluginStatesLock) {
+                @SuppressWarnings("unchecked")
+                final Map<String, Object> state = (Map<String, Object>) map;
+                manager.setPluginState(libraryId, pluginId, state);
+                send(libraryId, message);
+            }
+        } else {
+            send(libraryId, message);
+        }
+    }
+
+    private static Map<String, Object> pluginMessage(String libraryId, String pluginId, Object data) {
         final Map<String, Object> message = message(MessageType.PLUGIN, data);
         message.put("plugin", pluginId);
         message.put("library", libraryId);
-        send(libraryId, message);
+        return message;
     }
 
     private void send(String libraryId, Map<String, Object> message) {

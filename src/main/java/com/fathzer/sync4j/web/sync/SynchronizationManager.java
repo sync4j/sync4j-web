@@ -1,9 +1,11 @@
 package com.fathzer.sync4j.web.sync;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -22,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fathzer.sync4j.FileProvider;
 import com.fathzer.sync4j.Folder;
@@ -39,6 +42,8 @@ import com.fathzer.sync4j.config.SynchronizationConfig;
  */
 public class SynchronizationManager implements AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(SynchronizationManager.class);
+    private static final String LIBRARIES_KEY = "libraries";
+    private static final String PLUGINS_KEY = "plugins";
     private static final ObjectMapper MAPPER;
 
     static {
@@ -94,6 +99,8 @@ public class SynchronizationManager implements AutoCloseable {
 
     private final Map<String, Running> runningSyncs = new ConcurrentHashMap<>();
     private final Map<String, SyncStatus> syncStatuses = new ConcurrentHashMap<>();
+    /** The last message with a state of each plugin, by library id then plugin id (see {@link #setPluginState}). */
+    private final Map<String, Map<String, Map<String, Object>>> pluginStates = new ConcurrentHashMap<>();
     private final ExecutorService executorService;
     private final ScheduledExecutorService statsScheduler;
     private final AtomicInteger threadCount = new AtomicInteger(0);
@@ -107,7 +114,7 @@ public class SynchronizationManager implements AutoCloseable {
     /**
      * Constructor.
      * @param config the configuration
-     * @param statusFile the file where the statuses of the last synchronizations are saved
+     * @param statusFile the file where the statuses of the last synchronizations and the states of the plugins are saved
      */
     public SynchronizationManager(SynchronizationConfig config, Path statusFile) {
         this.config = Objects.requireNonNull(config);
@@ -135,17 +142,41 @@ public class SynchronizationManager implements AutoCloseable {
             return;
         }
         try {
-            final Map<String, SyncStatus> savedStatuses = MAPPER.readValue(statusFile.toFile(), new TypeReference<Map<String, SyncStatus>>() {});
+            final JsonNode root = MAPPER.readTree(statusFile.toFile());
+            final Map<String, SyncStatus> savedStatuses = root.has(LIBRARIES_KEY)
+                    ? MAPPER.convertValue(root.get(LIBRARIES_KEY), new TypeReference<Map<String, SyncStatus>>() {}) : Map.of();
             // Only keep statuses for libraries that exist in the current config
             savedStatuses.forEach((libraryId, status) -> {
-                if (config.libraries().stream().anyMatch(lib -> lib.id().equals(libraryId))) {
+                if (isLibrary(libraryId)) {
                     syncStatuses.put(libraryId, status);
                 }
             });
             log.info("Loaded sync statuses for {} libraries", savedStatuses.size());
-        } catch (IOException e) {
+            final Map<String, Map<String, Map<String, Object>>> savedPlugins = root.has(PLUGINS_KEY)
+                    ? MAPPER.convertValue(root.get(PLUGINS_KEY), new TypeReference<Map<String, Map<String, Map<String, Object>>>>() {}) : Map.of();
+            savedPlugins.forEach((libraryId, states) -> {
+                if (isLibrary(libraryId)) {
+                    states.forEach((pluginId, data) -> setLoadedPluginState(libraryId, pluginId, data));
+                }
+            });
+        } catch (IOException | IllegalArgumentException e) {
             log.error("Failed to load sync statuses", e);
         }
+    }
+
+    private boolean isLibrary(String libraryId) {
+        return config.libraries().stream().anyMatch(lib -> lib.id().equals(libraryId));
+    }
+
+    private void setLoadedPluginState(String libraryId, String pluginId, Map<String, Object> data) {
+        final Map<String, Object> state = new LinkedHashMap<>(data);
+        if ("RUNNING".equals(state.get("state"))) {
+            // Nobody monitors the plugin anymore: what it was doing is unknown
+            state.put("state", "UNKNOWN");
+            state.put("message", "The server was restarted while this was in progress: the result is unknown.");
+            state.remove("progress");
+        }
+        pluginStates.computeIfAbsent(libraryId, k -> new ConcurrentHashMap<>()).put(pluginId, state);
     }
 
     private synchronized void saveStatuses() {
@@ -153,11 +184,43 @@ public class SynchronizationManager implements AutoCloseable {
             return;
         }
         try {
-            MAPPER.writeValue(statusFile.toFile(), syncStatuses);
+            final Map<String, Object> root = new LinkedHashMap<>();
+            root.put(LIBRARIES_KEY, syncStatuses);
+            root.put(PLUGINS_KEY, pluginStates);
+            // The file is written then moved, so a reader (or a crash) never sees a partial file
+            final Path temp = statusFile.resolveSibling(statusFile.getFileName() + ".tmp");
+            MAPPER.writeValue(temp.toFile(), root);
+            try {
+                Files.move(temp, statusFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temp, statusFile, StandardCopyOption.REPLACE_EXISTING);
+            }
             log.debug("Successfully saved sync statuses");
         } catch (IOException e) {
             log.error("Failed to save sync statuses", e);
         }
+    }
+
+    /**
+     * Records the state of a plugin for a library, and saves it with the statuses.
+     * <br>This state is what a user that looks at the library later (even after the server restarted) should see about this plugin.
+     * It is forgotten when the next synchronization of the library starts.
+     * @param libraryId the library id
+     * @param pluginId the plugin id
+     * @param data the data published by the plugin (a JSON object with a <code>state</code>)
+     */
+    public void setPluginState(String libraryId, String pluginId, Map<String, Object> data) {
+        pluginStates.computeIfAbsent(libraryId, k -> new ConcurrentHashMap<>()).put(pluginId, new LinkedHashMap<>(data));
+        saveStatuses();
+    }
+
+    /**
+     * Gets the states of the plugins for a library.
+     * @param libraryId the library id
+     * @return the data last published with a state, by plugin id (never null)
+     */
+    public Map<String, Map<String, Object>> getPluginStates(String libraryId) {
+        return pluginStates.getOrDefault(libraryId, Map.of());
     }
 
     public void setBroadcaster(SyncBroadcaster broadcaster) {
@@ -189,6 +252,8 @@ public class SynchronizationManager implements AutoCloseable {
         // Register the synchronization before starting it, so it can be cancelled as soon as it runs
         final SyncStatus syncing = SyncStatus.syncing(synchronization.getStatistics());
         syncStatuses.put(libraryId, syncing);
+        // What the plugins said about the previous synchronization is obsolete
+        pluginStates.remove(libraryId);
         runningSyncs.put(libraryId, running);
         try {
             synchronization.start();

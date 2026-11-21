@@ -17,9 +17,9 @@ class AuthManager {
         loginContainer.style.maxWidth = '400px';
         loginContainer.style.margin = '100px auto';
         loginContainer.style.padding = '20px';
-        loginContainer.style.background = '#f8f9fa';
+        loginContainer.style.background = 'var(--login-bg)';
         loginContainer.style.borderRadius = '8px';
-        loginContainer.style.boxShadow = '0 0 10px rgba(0, 0, 0, 0.1)';
+        loginContainer.style.boxShadow = 'var(--shadow)';
         
         // Creating styles for the form
         const style = document.createElement('style');
@@ -46,7 +46,7 @@ class AuthManager {
             #login-form h2 {
                 text-align: center;
                 margin-bottom: 20px;
-                color: #333;
+                color: var(--text);
             }
             
             #login-form .form-group {
@@ -68,7 +68,9 @@ class AuthManager {
                 width: 100%;
                 height: 38px;
                 padding: 8px 35px 8px 8px;
-                border: 1px solid #ddd;
+                border: 1px solid var(--input-border);
+                background-color: var(--input-bg);
+                color: var(--text);
                 border-radius: 4px;
                 box-sizing: border-box;
                 line-height: 1.15;
@@ -83,7 +85,7 @@ class AuthManager {
                 background: none;
                 border: none;
                 cursor: pointer;
-                color: #666;
+                color: var(--text-muted);
                 padding: 0;
                 width: 20px;
                 height: 20px;
@@ -94,7 +96,7 @@ class AuthManager {
             }
             
             #login-form .password-toggle:hover {
-                color: #333;
+                color: var(--text);
             }
             
             #login-button {
@@ -114,38 +116,21 @@ class AuthManager {
             }
             
             #login-button:disabled {
-                background-color: #cccccc;
+                background-color: var(--disabled-bg);
                 cursor: not-allowed;
             }
             
             #login-error {
-                color: #d32f2f;
+                color: var(--error-color);
                 margin-top: 10px;
                 text-align: center;
-            }
-            
-            .logout-button {
-                position: absolute;
-                top: 20px;
-                right: 20px;
-                padding: 8px 15px;
-                background-color: #C62828;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-                text-decoration: none;
-            }
-            
-            .logout-button:hover {
-                background-color: #d32f2f;
             }
         `;
         document.head.appendChild(style);
 
         // HTML du formulaire
         loginContainer.innerHTML = `
-            <h2 style="text-align: center; margin-bottom: 20px; color: #333;">Login</h2>
+            <h2 style="text-align: center; margin-bottom: 20px;">Login</h2>
             <form id="auth-form">
                 <div class="form-group">
                     <label for="user">Username:</label>
@@ -168,7 +153,7 @@ class AuthManager {
                            border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-top: 10px;">
                     Sign In
                 </button>
-                <div id="login-error" style="color: #d32f2f; margin-top: 10px; text-align: center;"></div>
+                <div id="login-error" style="margin-top: 10px; text-align: center;"></div>
             </form>
         `;
 

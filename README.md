@@ -107,7 +107,7 @@ public class MyPlugin implements SyncPlugin {
 - `check(library)` lets a plugin tell that it can't do its job for a library (for instance, because a server it uses does not know the library). The web page asks it when the user selects a library, displays the problems in a box and offers to check again (the plugin is asked each time, so the result should not be cached for long and it should return quickly). If it throws an `IOException`, the message is displayed as a problem. These problems only inform the user: a plugin that wants to prevent a synchronization has to refuse it in `beforeSync`.
 - `SyncServer.Builder.plugin(plugin)` always activates a plugin.
 - A plugin can also be provided by a `SyncPluginFactory` that is discovered (see below). It is activated only if the configuration has a section for its id. A section that no plugin uses is reported in the log (it can be a typo or a plugin that could not be loaded).
-- `PluginContext.publish(libraryId, data)` sends `{"type":"PLUGIN","plugin":"id","library":"libraryId","data":...}` to the clients that watch the library. The web page displays `data.message` in its log and `data.progress` (`{"done":1,"total":2}`) as a progress bar titled `data.label`.
+- `PluginContext.publish(libraryId, data)` sends `{"type":"PLUGIN","plugin":"id","library":"libraryId","data":...}` to the clients that watch the library. The web page shows what the plugin does in **a card of its own** (for the end user) when `data` has a `state` (`RUNNING`, `DONE`, `FAILED` or `UNKNOWN`, displayed as a badge), `details` (an array of sentences) or a `progress` (`{"done":1,"total":2}`, a progress bar). `label` is the title of the card (the id of the plugin by default) and `message` is its sentence. The messages are also added to the technical log (see below). The last message that has a `state` is sent again to the clients that connect later (for instance, a user that loads the page again), until the next synchronization of the library starts. This state is also saved in the status file (`SyncServer.Builder.statusFile`, `syncStatuses.json` by default), next to the statuses of the libraries, so it survives a restart of the server. A `RUNNING` state that is loaded is changed to `UNKNOWN`, because nobody monitors the plugin anymore.
 
 ### Discovery of plugins and providers
 
@@ -124,7 +124,7 @@ If the application is packaged in a single jar (for instance with the Maven shad
 
 ### Authentication and the secret
 
-When the security is enabled, a user has to log in to use the application: the API of the libraries (`/api/libraries/**`, to read as well as to change something) and the WebSocket refuse the users that are not logged in (HTTP 401, the WebSocket is not even opened). Only the web page and its files, and the login API (`/api/login`), can be used without being logged in, because the page has to be displayed to show the login form. The page loads its data after the login, and shows the login form again if the session expires. The routes added by a plugin are protected by the plugin (see `PluginContext.loginManager()`).
+When the security is enabled, a user has to log in to use the application: the API of the libraries (`/api/libraries/**`, to read as well as to change something) and the WebSocket refuse the users that are not logged in (HTTP 401, the WebSocket is not even opened). Only the web page and its files, the login API (`/api/login`) and the title of the page (`/api/ui`) can be used without being logged in, because the page has to be displayed to show the login form. The page loads its data after the login, and shows the login form again if the session expires. The routes added by a plugin are protected by the plugin (see `PluginContext.loginManager()`).
 
 How the login works:
 
@@ -156,13 +156,19 @@ See also `secureCookie` in the configuration: it is about the cookie that carrie
 | GET | `/api/libraries/sync/{id}` | The status of a library |
 | POST | `/api/libraries/sync/{id}` | Starts a synchronization. Body: `{"suffixPath": "optional/sub/folder", "useChecksum": false}` |
 | DELETE | `/api/libraries/sync/{id}` | Cancels a synchronization |
+| GET | `/api/ui` | The title of the page: `{"title": "..."}`. Public, as the page and the login API |
 | GET | `/api/libraries/checks/{id}` | The problems found by the plugins in a library: `[{"plugin": "id", "message": "..."}]` (empty if none) |
 | WS | `/ws/sync/{libraryId}` | `STATUS`, `PROGRESS` and `PLUGIN` messages |
 | POST/GET/DELETE | `/api/login` | Log in (`{"user", "password"}`), check the login (`{"user"}` or 401), log out. The only routes of the API that don't need a login |
 
-All the routes above the login one need the user to be logged in if the security is enabled (otherwise, they answer 401).
+All the routes of the table, except `/api/ui` and `/api/login`, need the user to be logged in if the security is enabled (otherwise, they answer 401).
 
-To customize the web page, pass a directory to `SyncServer.Builder.staticFiles`: its files replace the default ones.
+### The web page
+
+- It has a card to start a synchronization, a card with its progress, whose badge (*In progress*, *Done*, *Failed*, *Cancelled*) and colored edge tell the state, and that folds itself when the synchronization succeeds (the user can unfold it), one card per plugin (see above) and a **technical log** card, collapsed by default.
+- The title of the page is `SyncServer.Builder.title(...)` ("Synchronization Dashboard" by default). The page reads it from `/api/ui`, that does not need a login (the login form is displayed with the title).
+- It follows the system theme: dark if the system asks for a dark one (`prefers-color-scheme`).
+- To customize the page more, pass a directory to `SyncServer.Builder.staticFiles`: its files replace the default ones.
 
 ## Known limitations
 

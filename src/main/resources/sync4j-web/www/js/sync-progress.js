@@ -94,12 +94,108 @@ class ProgressBlock {
     }
 }
 
+const PLUGIN_STATES = {
+    RUNNING: 'In progress',
+    DONE: 'Done',
+    FAILED: 'Failed',
+    UNKNOWN: 'Unknown'
+};
+
+// The state of the card of the synchronization, according to the status of the library
+const SYNC_STATES = {
+    SYNCING: { css: 'running', label: 'In progress' },
+    COMPLETED: { css: 'done', label: 'Done' },
+    FAILED: { css: 'failed', label: 'Failed' },
+    CANCELLED: { css: 'cancelled', label: 'Cancelled' }
+};
+
+/**
+ * The cards of the plugins: one card per plugin, that tells the end user what the plugin does.
+ * <br>A message of a plugin updates its card with: label (the title), state (RUNNING, DONE, FAILED or UNKNOWN), message (a sentence),
+ * details (a list of sentences) and progress ({done, total}). The texts are never interpreted as HTML.
+ */
+class PluginCards {
+    constructor(container) {
+        this.container = container;
+        this.cards = new Map();
+    }
+
+    update(pluginId, data) {
+        let card = this.cards.get(pluginId);
+        if (!card) {
+            card = this.createCard();
+            this.cards.set(pluginId, card);
+            this.container.appendChild(card.element);
+        }
+        this.fill(card, pluginId, data);
+    }
+
+    createCard() {
+        const element = document.createElement('section');
+        element.className = 'plugin-card';
+        const header = document.createElement('div');
+        header.className = 'plugin-card-header';
+        const title = document.createElement('h2');
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        header.append(title, badge);
+        const message = document.createElement('p');
+        message.className = 'plugin-card-message';
+        const details = document.createElement('ul');
+        details.className = 'plugin-card-details';
+        const progress = document.createElement('div');
+        progress.className = 'plugin-card-progress';
+        progress.innerHTML = '<div class="progress-bar"><div class="progress-fill"></div></div><span class="plugin-card-progress-text"></span>';
+        element.append(header, message, details, progress);
+        return { element, title, badge, message, details, progress,
+            fill: progress.querySelector('.progress-fill'), progressText: progress.querySelector('.plugin-card-progress-text') };
+    }
+
+    fill(card, pluginId, data) {
+        card.title.textContent = data.label || pluginId;
+
+        const state = String(data.state ?? '').toUpperCase();
+        const known = Object.hasOwn(PLUGIN_STATES, state);
+        card.element.className = `plugin-card state-${known ? state.toLowerCase() : 'unknown'}`;
+        card.badge.textContent = known ? PLUGIN_STATES[state] : (state ? state : '');
+        card.badge.style.display = known || state ? '' : 'none';
+
+        card.message.textContent = data.message ?? '';
+        card.message.style.display = data.message ? '' : 'none';
+
+        card.details.replaceChildren(...(Array.isArray(data.details) ? data.details : []).map(text => {
+            const item = document.createElement('li');
+            item.textContent = String(text);
+            return item;
+        }));
+        card.details.style.display = card.details.children.length > 0 ? '' : 'none';
+
+        const progress = data.progress;
+        if (progress && progress.total > 0) {
+            const percent = Math.max(0, Math.min(100, progress.done / progress.total * 100));
+            card.fill.style.width = `${percent}%`;
+            card.progressText.textContent = `${progress.done} / ${progress.total}`;
+            card.progress.style.display = '';
+        } else {
+            card.progress.style.display = 'none';
+        }
+    }
+
+    clear() {
+        this.cards.forEach(card => card.element.remove());
+        this.cards.clear();
+    }
+}
+
 export class SyncProgress {
     constructor() {
         this.progressSection = document.querySelector('.progress-section');
         this.progressContent = document.querySelector('.progress-content');
         this.statusMessage = document.getElementById('statusMessage');
+        this.progressBadge = document.getElementById('progressBadge');
         this.logOutput = document.getElementById('logOutput');
+        this.logSection = document.getElementById('logSection');
+        this.pluginCards = new PluginCards(document.getElementById('pluginCards'));
         
         // Create progress blocks
         this.checksBlock = ProgressBlock.createProgressBlock(this.progressContent, {
@@ -114,8 +210,6 @@ export class SyncProgress {
             formatValue: (n) => this.formatBytes(n)
         });
 
-        // The progress blocks created by the plugins (indexed by plugin id)
-        this.pluginBlocks = new Map();
 
         // Get references to the created elements for checksProgress
         this.checksProgress = document.getElementById('checksProgress');
@@ -131,12 +225,26 @@ export class SyncProgress {
                 }
             });
         }
+
+        // The log is collapsed by default
+        const toggleLog = document.getElementById('toggleLogSection');
+        if (toggleLog && this.logSection) {
+            toggleLog.addEventListener('click', () => {
+                this.logSection.classList.toggle('collapsed');
+                toggleLog.querySelector('.arrow')?.classList.toggle('up', !this.logSection.classList.contains('collapsed'));
+            });
+        }
     }
 
     updateLibraryStatus(status) {
         if (!status) return;
 
+        // The card is displayed when the library has a synchronization to show, for instance after the page was loaded again
+        if (SYNC_STATES[status.status]) {
+            this.progressSection.style.display = 'block';
+        }
         this.updateProgress(status.result);
+        this.showState(status.status);
         if (status.status === 'COMPLETED') {
             this.handleSyncCompletion(status);
         } else if (status.status === 'FAILED') {
@@ -144,6 +252,29 @@ export class SyncProgress {
         } else if (status.status === 'CANCELLED') {
             this.handleSyncCancellation(status);
         }
+    }
+
+    // Displays the state of the synchronization (badge and colored edge). The card is folded when the synchronization succeeded.
+    showState(status) {
+        const state = SYNC_STATES[status];
+        this.progressSection.classList.remove(...Object.values(SYNC_STATES).map(s => `state-${s.css}`));
+        if (this.progressBadge) {
+            this.progressBadge.textContent = state ? state.label : '';
+            this.progressBadge.style.display = state ? '' : 'none';
+        }
+        if (state) {
+            this.progressSection.classList.add(`state-${state.css}`);
+        }
+        // Only when the state changes, so a card that the user unfolded is not folded again by the next status
+        if (status !== this.shownStatus && (status === 'COMPLETED' || status === 'SYNCING')) {
+            this.setCollapsed(status === 'COMPLETED');
+        }
+        this.shownStatus = status;
+    }
+
+    setCollapsed(collapsed) {
+        this.progressSection.classList.toggle('collapsed', collapsed);
+        document.querySelector('#toggleProgressSection .arrow')?.classList.toggle('up', !collapsed);
     }
 
     updateProgress(data) {
@@ -172,42 +303,43 @@ export class SyncProgress {
     }
 
     /**
-     * Displays a message sent by a plugin: data.message is added to the log and data.progress ({done, total}) is displayed as a progress bar titled data.label.
+     * Displays a message sent by a plugin: data.message is added to the technical log, and the card of the plugin is updated if the message
+     * has a state, details or a progress (see PluginCards).
      */
     handlePluginMessage(pluginId, data) {
         if (!data) return;
         if (data.message) {
             this.addLog(`[${pluginId}] ${data.message}`);
         }
-        if (data.progress) {
-            const key = String(pluginId).replace(/[^a-zA-Z0-9_-]/g, '_');
-            let block = this.pluginBlocks.get(key);
-            if (!block) {
-                block = ProgressBlock.createProgressBlock(this.progressContent, {
-                    title: data.label || pluginId,
-                    idPrefix: `plugin-${key}`,
-                    formatValue: (n) => `${n}`
-                });
-                this.pluginBlocks.set(key, block);
-            }
-            block.update(data.progress);
+        if (data.state || data.progress || data.details) {
+            this.pluginCards.update(pluginId, data);
         }
     }
 
     showProgressSection() {
         this.progressSection.style.display = 'block';
         this.resetProgress();
+        this.setCollapsed(false);
+    }
+
+    hideProgressSection() {
+        this.resetProgress();
+        this.progressSection.style.display = 'none';
     }
 
     resetProgress() {
         this.checksBlock.reset();
         this.bytesBlock.reset();
-        this.pluginBlocks.forEach(block => block.reset());
-        if (this.logOutput) {
-            this.logOutput.innerHTML = '';
-            this.logOutput.classList.remove('show');
-        }
+        this.clearPluginData();
+        this.showState(null);
         this.resetStatusIndicators();
+    }
+
+    // Removes what the plugins displayed (their cards and the technical log), for instance when another library is selected
+    clearPluginData() {
+        this.pluginCards.clear();
+        if (this.logOutput) this.logOutput.innerHTML = '';
+        if (this.logSection) this.logSection.style.display = 'none';
     }
 
     showStatus(message, type = 'info') {
@@ -221,8 +353,8 @@ export class SyncProgress {
         logEntry.className = 'log-entry';
         logEntry.textContent = `[${new Date().toISOString()}] ${message}`;
         this.logOutput.appendChild(logEntry);
-        // The log is hidden as long as it is empty
-        this.logOutput.classList.add('show');
+        // The card of the log is hidden as long as the log is empty
+        if (this.logSection) this.logSection.style.display = 'block';
         this.logOutput.scrollTop = this.logOutput.scrollHeight;
     }
 

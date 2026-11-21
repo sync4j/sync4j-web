@@ -235,6 +235,92 @@ class SyncServerTest {
     }
 
     @Test
+    void testTitleOfThePage() throws Exception {
+        // The title does not need a login (the login form is displayed with it)
+        start(config(true, ""));
+        HttpResponse<String> response = send("GET", "/api/ui", null, null);
+        assertEquals(200, response.statusCode());
+        assertEquals("Synchronization Dashboard", MAPPER.readTree(response.body()).get("title").asText());
+        server.stop();
+
+        server = SyncServer.builder(config(true, "")).authenticator(AUTHENTICATOR).statusFile(tmp.resolve("statuses.json")).title("My photos").build();
+        server.start(0);
+        assertEquals("My photos", MAPPER.readTree(send("GET", "/api/ui", null, null).body()).get("title").asText());
+        // ... but nothing else does
+        assertEquals(401, send("GET", "/api/libraries", null, null).statusCode());
+    }
+
+    @Test
+    void testStateOfThePluginIsSentToTheClientsThatConnectLater() throws Exception {
+        start(config(false, ""));
+        // A message with a state is the state of the plugin, a message without is only something that happened
+        plugin.context.publish("photos", Map.of("message", "Just a message"));
+        plugin.context.publish("photos", Map.of("label", "Plugin", "state", "RUNNING", "message", "Old state"));
+        plugin.context.publish("photos", Map.of("label", "Plugin", "state", "DONE", "message", "Current state"));
+
+        final MessageCollector collector = new MessageCollector();
+        final WebSocket webSocket = client.newWebSocketBuilder().buildAsync(URI.create("ws://localhost:" + server.port() + "/ws/sync/photos"), collector).get(5, TimeUnit.SECONDS);
+        try {
+            // The status of the library, then the last state of the plugin (and nothing else)
+            assertEquals("IDLE", collector.await("STATUS").get("data").get("status").asText());
+            final JsonNode state = collector.await("PLUGIN");
+            assertEquals("test", state.get("plugin").asText());
+            assertEquals("DONE", state.get("data").get("state").asText());
+            assertEquals("Current state", state.get("data").get("message").asText());
+            assertNull(collector.messages.poll(300, TimeUnit.MILLISECONDS), "Nothing else should be sent");
+        } finally {
+            webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
+        }
+
+        // What the plugin said about a synchronization is obsolete when the next one starts
+        assertEquals(202, send("POST", "/api/libraries/sync/photos", "{}", null).statusCode());
+        assertEquals("COMPLETED", awaitStatusEnd(null).get("status").asText());
+        final MessageCollector later = new MessageCollector();
+        final WebSocket other = client.newWebSocketBuilder().buildAsync(URI.create("ws://localhost:" + server.port() + "/ws/sync/photos"), later).get(5, TimeUnit.SECONDS);
+        try {
+            assertEquals("COMPLETED", later.await("STATUS").get("data").get("status").asText());
+            Thread.sleep(300);
+            assertTrue(later.messages.stream().noneMatch(m -> "PLUGIN".equals(m.get("type").asText())), "The old state should not be sent: " + later.messages);
+        } finally {
+            other.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    void testStateOfThePluginSurvivesARestartOfTheServer() throws Exception {
+        start(config(false, ""));
+        plugin.context.publish("photos", Map.of("label", "Plugin", "state", "DONE", "message", "Finished", "details", List.of("All good")));
+        server.stop();
+        // The state is in the same file as the statuses of the libraries
+        final JsonNode saved = MAPPER.readTree(tmp.resolve("statuses.json").toFile());
+        assertEquals("IDLE", saved.get("libraries").get("photos").get("status").asText());
+        assertEquals("DONE", saved.get("plugins").get("photos").get("test").get("state").asText());
+
+        start(config(false, ""));
+        assertEquals("DONE", firstPluginMessage().get("data").get("state").asText());
+        assertEquals("All good", firstPluginMessage().get("data").get("details").get(0).asText());
+
+        // A plugin that was working when the server stopped is not monitored anymore: its result is unknown
+        plugin.context.publish("photos", Map.of("label", "Plugin", "state", "RUNNING", "message", "Working", "progress", Map.of("done", 1, "total", 2)));
+        server.stop();
+        start(config(false, ""));
+        final JsonNode data = firstPluginMessage().get("data");
+        assertEquals("UNKNOWN", data.get("state").asText());
+        assertTrue(data.get("message").asText().contains("restarted"), data.toString());
+        assertFalse(data.has("progress"));
+    }
+
+    private JsonNode firstPluginMessage() throws Exception {
+        final MessageCollector collector = new MessageCollector();
+        final WebSocket webSocket = client.newWebSocketBuilder().buildAsync(URI.create("ws://localhost:" + server.port() + "/ws/sync/photos"), collector).get(5, TimeUnit.SECONDS);
+        try {
+            return collector.await("PLUGIN");
+        } finally {
+            webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
     void testCustomStaticFilesOverrideTheDefaultPage() throws Exception {
         final Path custom = Files.createDirectory(tmp.resolve("custom"));
         Files.writeString(custom.resolve("index.html"), "<html>My page</html>");

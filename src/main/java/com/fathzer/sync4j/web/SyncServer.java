@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -61,6 +62,8 @@ import io.javalin.json.JavalinJackson;
 public class SyncServer implements AutoCloseable {
     /** The default port. */
     public static final int DEFAULT_PORT = 8080;
+    /** The default title of the web page. */
+    public static final String DEFAULT_TITLE = "Synchronization Dashboard";
 
     private static final Logger log = LoggerFactory.getLogger(SyncServer.class);
 
@@ -76,6 +79,7 @@ public class SyncServer implements AutoCloseable {
         private Path pluginsDirectory;
         private Path statusFile = Paths.get("syncStatuses.json");
         private Path staticFiles;
+        private String title = DEFAULT_TITLE;
         private final List<SyncPlugin> plugins = new ArrayList<>();
 
         private Builder(SyncWebConfig config) {
@@ -166,6 +170,16 @@ public class SyncServer implements AutoCloseable {
         }
 
         /**
+         * Sets the title of the web page (it is displayed at the top of the page and is the title of the browser tab).
+         * @param title the title ({@value SyncServer#DEFAULT_TITLE} by default)
+         * @return this
+         */
+        public Builder title(String title) {
+            this.title = Objects.requireNonNull(title);
+            return this;
+        }
+
+        /**
          * Builds the server (it is not started).
          * @return a new server
          * @throws IOException if a library can't be opened or a plugin can't be initialized
@@ -213,6 +227,7 @@ public class SyncServer implements AutoCloseable {
     }
 
     private final SyncWebConfig config;
+    private final String title;
     private final Javalin app;
     private final LoginManager loginManager;
     private final SynchronizationManager manager;
@@ -231,6 +246,7 @@ public class SyncServer implements AutoCloseable {
 
     private SyncServer(Builder builder) throws IOException {
         this.config = builder.config;
+        this.title = builder.title;
         if (config.synchronization().libraries().isEmpty()) {
             throw new IllegalArgumentException("No libraries specified");
         }
@@ -285,6 +301,8 @@ public class SyncServer implements AutoCloseable {
     }
 
     private void registerRoutes(RoutesConfig routes) {
+        // The page needs its title to display the login form
+        routes.get("/api/ui", ctx -> ctx.json(Map.of("title", title)));
         new LoginRestService(loginManager).registerRoutes(routes, "/api/login");
         new SyncRestService(manager, loginManager, this::check).registerRoutes(routes, "/api/libraries");
         final String wsPath = "/ws/sync/{" + SyncWsService.LIBRARY_ID_PARAM + "}";
