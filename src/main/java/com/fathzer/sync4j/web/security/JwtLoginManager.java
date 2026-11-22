@@ -1,5 +1,6 @@
 package com.fathzer.sync4j.web.security;
 
+import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -123,16 +124,7 @@ public class JwtLoginManager implements LoginManager {
                 ctx.status(429).json(Map.of(MESSAGE, "Too many failed attempts, try again in " + seconds + " s", "retryAfter", seconds));
                 return;
             }
-            final String user;
-            try {
-                user = authenticator.authenticate(request.user(), request.password());
-            } catch (AuthenticationFailedException e) {
-                if (e.getStatusCode() == 401 || e.getStatusCode() == 403) {
-                    throttle.failed(request.user());
-                }
-                throw e;
-            }
-            throttle.succeeded(request.user());
+            final String user = authenticate(request);
             final String token = Jwts.builder()
                 .subject(user)
                 .issuedAt(Date.from(Instant.now()))
@@ -147,6 +139,21 @@ public class JwtLoginManager implements LoginManager {
         } catch (Exception e) {
             log.warn("An error occurred during authentication", e);
             ctx.status(500).json(Map.of(MESSAGE, "An error occurred during authentication: " + e.getMessage()));
+        }
+    }
+
+    /** Checks the credentials with the authenticator, and records the result for the throttle. */
+    private String authenticate(LoginRequest request) throws IOException {
+        try {
+            final String user = authenticator.authenticate(request.user(), request.password());
+            throttle.succeeded(request.user());
+            return user;
+        } catch (AuthenticationFailedException e) {
+            // Only a rejection of the credentials is a failed attempt (not a service that is not available, for instance)
+            if (e.getStatusCode() == 401 || e.getStatusCode() == 403) {
+                throttle.failed(request.user());
+            }
+            throw e;
         }
     }
 
