@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synchronization Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- The page can be installed as an application (the manifest is built by the server, with the title of the application) -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <meta name="theme-color" content="#f5f7fa" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#12161c" media="(prefers-color-scheme: dark)">
+    <style>
+        #app-content {
+            display: none; /* Hidden by default until authentication */
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="app-content" style="display: none;">
+        <header>
+            <h1 id="appTitle"></h1>
+            <a href="#" class="logout-button" id="logout-button" data-i18n="logout">Logout</a>
+        </header>
+
+        <main>
+            <div class="sync-form">
+                <div class="form-group">
+                    <label for="librarySelect" data-i18n="form.library">Select Library:</label>
+                    <div class="library-select-container">
+                        <select id="librarySelect">
+                            <option value="" data-i18n="form.loading">Loading libraries...</option>
+                        </select>
+                        <div id="libraryStatus" class="library-status">
+                            <span class="status-indicator" id="statusIndicator"></span>
+                            <span id="lastSyncTime" class="last-sync"></span>
+                        </div>
+                    </div>
+                    <div id="errorMessage" class="error-message"></div>
+                    <div id="libraryWarnings" class="library-warnings" style="display: none;">
+                        <ul id="libraryWarningsList"></ul>
+                        <button id="recheckBtn" class="btn btn-secondary" type="button" data-i18n="form.checkAgain">Check again</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="suffixPath" data-i18n="form.suffix">Suffix Path (optional):</label>
+                    <input type="text" id="suffixPath" placeholder="e.g., subfolder/path" data-i18n-placeholder="form.suffix.placeholder">
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="useChecksum">
+                        <span data-i18n="form.checksum">Use Checksum Verification</span>
+                    </label>
+                </div>
+
+                <div class="form-actions">
+                    <button id="startBtn" class="btn btn-primary" data-i18n="form.start">Start Synchronization</button>
+                    <button id="stopBtn" class="btn btn-danger" disabled data-i18n="form.stop">Stop Synchronization</button>
+                </div>
+            </div>
+
+            <div class="progress-section" style="display: none;">
+                <div class="progress-header">
+                    <div class="header-title">
+                        <h2 data-i18n="progress.title">Synchronization</h2>
+                        <span id="progressBadge" class="badge" style="display: none;"></span>
+                    </div>
+                    <button id="toggleProgressSection" class="toggle-button" title="Collapse/Expand" data-i18n-title="toggle">
+                        <span class="arrow"></span>
+                    </button>
+                </div>
+                
+                <div class="progress-content">
+                    <!-- Progress blocks will be added here by JavaScript -->
+                </div>
+
+                <div class="status-section">
+                    <div id="statusMessage" class="status-message"></div>
+                </div>
+            </div>
+
+            <!-- What the plugins do, for the end user (one card per plugin, added by the script) -->
+            <div id="pluginCards"></div>
+
+            <!-- The technical log, collapsed by default -->
+            <div id="logSection" class="log-section collapsed" style="display: none;">
+                <div class="progress-header">
+                    <h2 data-i18n="log.title">Technical log</h2>
+                    <button id="toggleLogSection" class="toggle-button" title="Collapse/Expand" data-i18n-title="toggle">
+                        <span class="arrow"></span>
+                    </button>
+                </div>
+                <div class="log-content">
+                    <div id="logOutput" class="log-output"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/i18n.js"></script>
+    <script src="js/auth.js"></script>
+    <script type="module" src="script.js">
+        // Logout button handling
+        document.addEventListener('DOMContentLoaded', () => {
+            const logoutButton = document.getElementById('logout-button');
+            if (logoutButton) {
+                logoutButton.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (window.authManager) {
+                        window.authManager.logout();
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
