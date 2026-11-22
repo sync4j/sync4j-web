@@ -26,6 +26,16 @@ class I18nTest {
     }
 
     @Test
+    void testAnApplicationCanAddALanguageWithItsResources() {
+        // The test resources have a sync4j-web/i18n/messages_eo.properties file, as an application can have
+        assertEquals("eo", NO_SOURCE.language(null, "eo,en;q=0.5"));
+        final Map<String, String> messages = NO_SOURCE.messages("eo");
+        assertEquals("Elsaluti", messages.get("logout"));
+        // What it does not translate is in English
+        assertEquals("Login", messages.get("login.title"));
+    }
+
+    @Test
     void testEnglishWhenTheLanguageIsNotKnown() {
         assertEquals("en", NO_SOURCE.language(null, null));
         assertEquals("en", NO_SOURCE.language(null, ""));
@@ -53,8 +63,8 @@ class I18nTest {
         // A source replaces what is before it
         assertEquals("Quitter", messages.get("logout"));
         assertEquals("Connexion", messages.get("login.title"));
-        // English has no translation: the texts of the code are used
-        assertTrue(i18n.messages("en").isEmpty());
+        // The English translations of the server
+        assertEquals("The library can't be checked: {0}", i18n.messages("en").get("check.failed"));
     }
 
     @Test
@@ -97,9 +107,33 @@ class I18nTest {
     }
 
     @Test
-    void testMessageToStringIsTheEnglishText() {
-        assertEquals("7 tasks left", Message.of("k", "{0} tasks left", 7).toString());
-        assertEquals("Library photos: 7 tasks left", Message.of("k", "Library {0}: {1}", "photos", Message.of("k2", "{0} tasks left", 7)).toString());
-        assertEquals("plain", Message.text("plain").toString());
+    void testTextOfAMessage() {
+        final Map<String, String> english = Map.of("left", "{0} tasks left", "library", "Library {0}: {1}");
+        assertEquals("7 tasks left", Message.of("left", 7).format(english));
+        // The arguments can be messages
+        assertEquals("Library photos: 7 tasks left", Message.of("library", "photos", Message.of("left", 7)).format(english));
+        // An argument can be null (the message of an exception, for instance)
+        assertEquals("null tasks left", Message.of("left", (Object) null).format(english));
+        // A key without translation is displayed as is
+        assertEquals("unknown", Message.of("unknown", 1).format(english));
+    }
+
+    @Test
+    void testEnglishCompletesTheOtherLanguages() {
+        final Function<String, Map<String, String>> plugin = language -> switch (language) {
+            case "en" -> Map.of("a", "A", "b", "B");
+            case "fr" -> Map.of("a", "A en français");
+            default -> Map.of();
+        };
+        final Map<String, String> french = new I18n(() -> List.of(plugin)).messages("fr");
+        assertEquals("A en français", french.get("a"));
+        assertEquals("B", french.get("b"));
+        assertEquals("Impossible de vérifier la bibliothèque : {0}", french.get("check.failed"));
+    }
+
+    @Test
+    void testEveryKeyOfTheServerHasAnEnglishText() {
+        final Map<String, String> english = Translations.load(getClass().getClassLoader(), I18n.CORE_BASE, "en");
+        assertTrue(english.keySet().containsAll(List.of("app.title", "check.failed", "plugin.interrupted")), english.toString());
     }
 }

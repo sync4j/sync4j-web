@@ -70,7 +70,11 @@ class SyncServerTest {
 
         @Override
         public Map<String, String> translations(String language) {
-            return "fr".equals(language) ? Map.of("test.notReady", "{0} n'est pas prêt non plus") : Map.of();
+            return switch (language) {
+                case "en" -> Map.of("test.notReadyEither", "{0} is not ready either", "test.englishOnly", "Only in English");
+                case "fr" -> Map.of("test.notReadyEither", "{0} n'est pas prêt non plus");
+                default -> Map.of();
+            };
         }
 
         @Override
@@ -313,7 +317,7 @@ class SyncServerTest {
         final JsonNode data = firstPluginMessage().get("data");
         assertEquals("UNKNOWN", data.get("state").asText());
         assertEquals("plugin.interrupted", data.get("message").get("key").asText());
-        assertTrue(data.get("message").get("fallback").asText().contains("restarted"), data.toString());
+        assertFalse(data.get("message").has("fallback"), data.toString());
         assertFalse(data.has("progress"));
     }
 
@@ -341,12 +345,16 @@ class SyncServerTest {
         assertEquals("fr", messages.get("language").asText());
         // The translations of the page, of the plugins, and of the application (that replaces the ones of the page)
         assertEquals("Déconnexion", messages.get("messages").get("logout").asText());
-        assertEquals("{0} n'est pas prêt non plus", messages.get("messages").get("test.notReady").asText());
+        assertEquals("{0} n'est pas prêt non plus", messages.get("messages").get("test.notReadyEither").asText());
+        // What is not translated is in English
+        assertEquals("Only in English", messages.get("messages").get("test.englishOnly").asText());
+        assertEquals("The library can't be checked: {0}", MAPPER.readTree(sendWithLanguage("/api/i18n", "de").body()).get("messages").get("check.failed").asText());
         assertEquals("Identification", messages.get("messages").get("login.title").asText());
 
         final JsonNode english = MAPPER.readTree(sendWithLanguage("/api/i18n", "en-US,fr;q=0.5").body());
         assertEquals("en", english.get("language").asText());
-        assertEquals(0, english.get("messages").size());
+        assertEquals("{0} is not ready either", english.get("messages").get("test.notReadyEither").asText());
+        assertEquals("Logout", english.get("messages").get("logout").asText());
         assertEquals("fr", MAPPER.readTree(send("GET", "/api/i18n?lang=fr", null, null).body()).get("language").asText());
 
         // The title is the one of the application
@@ -545,12 +553,12 @@ class SyncServerTest {
         assertEquals("[]", response.body());
 
         // The problems of the plugin are returned, and the plugin is asked each time (the user can check again after fixing the problem)
-        plugin.warnings = List.of(Message.text("Not ready"), Message.of("test.notReady", "{0} is not ready either", "Photos"));
+        plugin.warnings = List.of(Message.of("test.notReady"), Message.of("test.notReadyEither", "Photos"));
         JsonNode warnings = MAPPER.readTree(send("GET", "/api/libraries/checks/photos", null, null).body());
         assertEquals(2, warnings.size());
         assertEquals("test", warnings.get(0).get("plugin").asText());
-        assertEquals("Not ready", warnings.get(0).get("message").get("fallback").asText());
-        assertEquals("test.notReady", warnings.get(1).get("message").get("key").asText());
+        assertEquals("test.notReady", warnings.get(0).get("message").get("key").asText());
+        assertEquals("test.notReadyEither", warnings.get(1).get("message").get("key").asText());
         assertEquals("Photos", warnings.get(1).get("message").get("args").get(0).asText());
         plugin.warnings = List.of();
         assertEquals("[]", send("GET", "/api/libraries/checks/photos", null, null).body());
@@ -561,7 +569,6 @@ class SyncServerTest {
         warnings = MAPPER.readTree(send("GET", "/api/libraries/checks/photos", null, null).body());
         assertEquals(1, warnings.size());
         assertEquals("check.failed", warnings.get(0).get("message").get("key").asText());
-        assertTrue(warnings.get(0).get("message").get("fallback").asText().contains("{0}"));
         assertEquals("The photo server is not available", warnings.get(0).get("message").get("args").get(0).asText());
 
         assertEquals(404, send("GET", "/api/libraries/checks/unknown", null, null).statusCode());

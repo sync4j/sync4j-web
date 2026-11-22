@@ -44,7 +44,7 @@ public interface SyncPlugin extends SyncListener, AutoCloseable {
      * Gets the translations of the texts of the plugin (see {@link Message}).
      * <br>It is called when the page asks for its translations, with the language chosen for the user (for instance <code>fr</code>).
      * The keys are shared with the ones of the page and of the other plugins: start them with the id of the plugin.
-     * The English texts are the fallbacks of the messages, so there is nothing to return for English.
+     * The English translations are required: they complete the ones of the other languages (a key that is not translated in French is displayed in English).
      * {@link com.fathzer.sync4j.web.i18n.Translations#load} reads them from <code>.properties</code> files.
      * @param language the language, in lowercase (<code>fr</code>)
      * @return the translations by key (empty by default)

@@ -6,7 +6,8 @@
  * <li>In the HTML, <code>data-i18n="key"</code> translates the text of an element, <code>data-i18n-title</code>, <code>data-i18n-placeholder</code>
  * and <code>data-i18n-aria-label</code> translate the attributes. The English text of the element is the fallback.</li>
  * <li>In the scripts, <code>i18n.t(key, fallback, ...args)</code>: <code>{0}</code>, <code>{1}</code>... of the pattern are replaced by the arguments.</li>
- * <li><code>i18n.text(value)</code> displays what a plugin sent: a string, or a message <code>{key, fallback, args}</code>.</li>
+ * <li><code>i18n.text(value)</code> displays what a plugin sent: a string, or a message <code>{key, args}</code> (the server completes the translations
+ * with the English ones, the key is displayed if it has no translation at all).</li>
  * </ul>
  */
 (function () {
@@ -25,7 +26,7 @@
             return String(value);
         }
         const translated = value.key ? state.messages[value.key] : undefined;
-        return format(translated ?? value.fallback ?? value.key ?? '', (value.args ?? []).map(text));
+        return format(translated ?? value.key ?? '', (value.args ?? []).map(text));
     }
 
     function t(key, fallback, ...args) {

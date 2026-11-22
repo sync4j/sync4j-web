@@ -1,5 +1,6 @@
 package com.fathzer.sync4j.web.i18n;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -39,6 +40,7 @@ public final class I18n {
      * @return the language
      */
     public String language(String requested, String acceptLanguage) {
+        // English is always available (it completes the other languages)
         if (isSupported(requested)) {
             return requested;
         }
@@ -67,12 +69,19 @@ public final class I18n {
      * @return the translations of the page, completed by the ones of the plugins and the application
      */
     public Map<String, String> messages(String language) {
-        final Map<String, String> result = new HashMap<>(Translations.load(I18n.class.getClassLoader(), CORE_BASE, language));
-        for (Function<String, Map<String, String>> source : sources.get()) {
-            try {
-                result.putAll(source.apply(language));
-            } catch (RuntimeException e) {
-                log.warn("Can't load translations ({})", language, e);
+        // English completes the other languages: a key that is not translated is displayed in English
+        final List<String> languages = DEFAULT_LANGUAGE.equals(language) ? List.of(DEFAULT_LANGUAGE) : List.of(DEFAULT_LANGUAGE, language);
+        final List<Function<String, Map<String, String>>> all = new ArrayList<>();
+        all.add(lang -> Translations.load(I18n.class.getClassLoader(), CORE_BASE, lang));
+        all.addAll(sources.get());
+        final Map<String, String> result = new HashMap<>();
+        for (String lang : languages) {
+            for (Function<String, Map<String, String>> source : all) {
+                try {
+                    result.putAll(source.apply(lang));
+                } catch (RuntimeException e) {
+                    log.warn("Can't load translations ({})", lang, e);
+                }
             }
         }
         return result;

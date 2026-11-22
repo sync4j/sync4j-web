@@ -1,6 +1,11 @@
 # sync4j-web
 
-A web server to run and monitor [sync4j](https://github.com/fathzer/sync4j) synchronizations, with a single page UI.
+[![Maven Central](https://img.shields.io/maven-central/v/com.fathzer/sync4j-web)](https://search.maven.org/artifact/com.fathzer/sync4j-web)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Javadocs](https://www.javadoc.io/badge/com.fathzer/sync4j-web.svg)](https://www.javadoc.io/doc/com.fathzer/sync4j-web)
+[![SonarCloud](https://sonarcloud.io/api/project_badges/measure?project=sync4j_sync4j-web&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=sync4j_sync4j-web)
+
+A web server to run and monitor [sync4j](https://github.com/sync4j/sync4j) synchronizations, with a single page UI.
 
 It is a reusable component: an application provides a configuration (the *libraries* to synchronize) and, optionally, plugins that add what is specific to the application (for instance, asking a photo server to scan a library when a synchronization is over).
 
@@ -11,12 +16,48 @@ It is a reusable component: an application provides a configuration (the *librar
 - Providers are pluggable: a provider library ships its own factory (sync4j provides `local` and `memory`, sync4j-pcloud provides `"provider": "pCloud"`).
 - Extensible with plugins.
 
+## Table of contents
+
+- [Requirements](#requirements)
+- [Usage](#usage)
+  - [Configuration](#configuration)
+  - [Providers](#providers)
+  - [Synchronizations](#synchronizations)
+- [The web page](#the-web-page)
+- [Plugins](#plugins)
+  - [Writing a plugin](#writing-a-plugin)
+  - [What a plugin displays in the page](#what-a-plugin-displays-in-the-page)
+  - [Activation of the plugins](#activation-of-the-plugins)
+  - [Discovery of plugins and providers](#discovery-of-plugins-and-providers)
+- [Translations](#translations)
+  - [Choice of the language](#choice-of-the-language)
+  - [Who translates what](#who-translates-what)
+  - [Translation files](#translation-files)
+  - [Adding a language](#adding-a-language)
+  - [Translating a plugin](#translating-a-plugin)
+  - [What is not translated](#what-is-not-translated)
+- [Authentication and the secret](#authentication-and-the-secret)
+- [API](#api)
+- [Known limitations](#known-limitations)
+- [Running the tests](#running-the-tests)
+
 ## Requirements
 
 - Java 21
-- sync4j 0.0.2 and [sync4j-config](https://github.com/sync4j/sync4j-config) 0.0.1 (the reading of the `synchronization` part of the configuration is done by sync4j-config, please see its documentation for the format of the libraries and the providers)
 
 ## Usage
+
+Add the dependency to your project (it brings sync4j, [sync4j-config](https://github.com/sync4j/sync4j-config), Javalin and the JWT libraries):
+
+```xml
+<dependency>
+    <groupId>com.fathzer</groupId>
+    <artifactId>sync4j-web</artifactId>
+    <version>0.0.1</version>
+</dependency>
+```
+
+Then build and start the server:
 
 ```java
 SyncWebConfig config = ConfigLoader.load(Paths.get("config.json"), ProviderRegistry.withDefaults());
@@ -30,6 +71,8 @@ try (SyncServer server = SyncServer.builder(config)
 ```
 
 ### Configuration
+
+The `synchronization` part of the configuration is read by sync4j-config: please see its documentation for the format of the libraries and the providers.
 
 ```json
 {
@@ -74,7 +117,23 @@ The `provider` attribute of a source or destination is the type of a `FileProvid
 - An error does not cancel the synchronization: the other entries are synchronized, and the status of the library is `FAILED` if some errors remain after the retries of sync4j.
 - Everything the synchronization opens (providers, thread pools) is released when it is over.
 
-### Plugins
+## The web page
+
+The page is served by the server itself (it is in the jar of sync4j-web):
+
+- It has a card to start a synchronization, a card with its progress, one card per plugin (see [What a plugin displays in the page](#what-a-plugin-displays-in-the-page)) and a **technical log** card, collapsed by default.
+- The badge of the card of the synchronization (*In progress*, *Done*, *Failed*, *Cancelled*) and its colored edge tell the state. The card folds itself when the synchronization succeeds (the user can unfold it).
+- The title of the page is `SyncServer.Builder.title(...)`, or the translation of `app.title` (see [Who translates what](#who-translates-what)), "Synchronization Dashboard" by default. The page reads it from `/api/ui`, that does not need a login (the login form is displayed with the title).
+- It follows the system theme: dark if the system asks for a dark one (`prefers-color-scheme`).
+- On a phone, a single button is displayed to save some height: *Start Synchronization*, replaced by *Stop Synchronization* while the library is synchronizing.
+- It is displayed in the language of the user (see [Translations](#translations)).
+- To customize the page more, pass a directory to `SyncServer.Builder.staticFiles`: its files replace the default ones.
+
+## Plugins
+
+A plugin adds to the server what is specific to an application (for instance, asking a photo server to scan a library after a synchronization).
+
+### Writing a plugin
 
 A plugin implements `SyncPlugin`:
 
@@ -88,7 +147,7 @@ public class MyPlugin implements SyncPlugin {
         // context.loginManager() protects them
     }
 
-    public List<String> check(Library library) throws IOException {
+    public List<Message> check(Library library) throws IOException {
         // The problems found in the library (an empty list if there is none), displayed to the user
         return List.of();
     }
@@ -101,13 +160,29 @@ public class MyPlugin implements SyncPlugin {
         // Called when a synchronization is over, resources are released.
         // It should return quickly: use another thread for long jobs and report with context.publish(...)
     }
+
+    public Map<String, String> translations(String language) {
+        // The translations of the texts of the plugin (see "Translating a plugin")
+        return Translations.load(getClass().getClassLoader(), "myplugin/messages", language);
+    }
 }
 ```
 
-- `check(library)` lets a plugin tell that it can't do its job for a library (for instance, because a server it uses does not know the library). The web page asks it when the user selects a library, displays the problems in a box and offers to check again (the plugin is asked each time, so the result should not be cached for long and it should return quickly). If it throws an `IOException`, the message is displayed as a problem. These problems only inform the user: a plugin that wants to prevent a synchronization has to refuse it in `beforeSync`.
+- `check(library)` lets a plugin tell that it can't do its job for a library (for instance, because a server it uses does not know the library). The web page asks it when the user selects a library, displays the problems in a box and offers to check again (the plugin is asked each time, so the result should not be cached for long and it should return quickly). If it throws an `IOException`, its message is displayed as a problem. These problems only inform the user: a plugin that wants to prevent a synchronization has to refuse it in `beforeSync`.
+
+### What a plugin displays in the page
+
+`PluginContext.publish(libraryId, data)` sends `{"type":"PLUGIN","plugin":"id","library":"libraryId","data":...}` to the clients that watch the library.
+
+- The web page shows what the plugin does in **a card of its own** (for the end user) when `data` has a `state` (`RUNNING`, `DONE`, `FAILED` or `UNKNOWN`, displayed as a badge), `details` (an array of sentences) or a `progress` (`{"done":1,"total":2}`, a progress bar). `label` is the title of the card (the id of the plugin by default) and `message` is its sentence.
+- These texts (`label`, `message` and the items of `details`) are strings, or `Message`s that the page translates (see [Translating a plugin](#translating-a-plugin)).
+- `message` is also added to the technical log.
+- The last message that has a `state` is sent again to the clients that connect later (for instance, a user that loads the page again), until the next synchronization of the library starts. It is also saved in the status file (`SyncServer.Builder.statusFile`, `syncStatuses.json` by default), next to the statuses of the libraries, so it survives a restart of the server. A `RUNNING` state that is loaded is changed to `UNKNOWN`, because nobody monitors the plugin anymore.
+
+### Activation of the plugins
+
 - `SyncServer.Builder.plugin(plugin)` always activates a plugin.
 - A plugin can also be provided by a `SyncPluginFactory` that is discovered (see below). It is activated only if the configuration has a section for its id. A section that no plugin uses is reported in the log (it can be a typo or a plugin that could not be loaded).
-- `PluginContext.publish(libraryId, data)` sends `{"type":"PLUGIN","plugin":"id","library":"libraryId","data":...}` to the clients that watch the library. The web page shows what the plugin does in **a card of its own** (for the end user) when `data` has a `state` (`RUNNING`, `DONE`, `FAILED` or `UNKNOWN`, displayed as a badge), `details` (an array of sentences) or a `progress` (`{"done":1,"total":2}`, a progress bar). `label` is the title of the card (the id of the plugin by default) and `message` is its sentence. The texts (`label`, `message` and the items of `details`) are strings, or `Message`s that the page translates (see "Translations" below). The messages are also added to the technical log (see below). The last message that has a `state` is sent again to the clients that connect later (for instance, a user that loads the page again), until the next synchronization of the library starts. This state is also saved in the status file (`SyncServer.Builder.statusFile`, `syncStatuses.json` by default), next to the statuses of the libraries, so it survives a restart of the server. A `RUNNING` state that is loaded is changed to `UNKNOWN`, because nobody monitors the plugin anymore.
 
 ### Discovery of plugins and providers
 
@@ -122,9 +197,61 @@ An implementation that can't be loaded (missing class, wrong type, unreadable ja
 
 If the application is packaged in a single jar (for instance with the Maven shade plugin), the `META-INF/services` files of its dependencies have to be merged (`ServicesResourceTransformer`).
 
-### Authentication and the secret
+## Translations
 
-When the security is enabled, a user has to log in to use the application: the API of the libraries (`/api/libraries/**`, to read as well as to change something) and the WebSocket refuse the users that are not logged in (HTTP 401, the WebSocket is not even opened). Only the web page and its files, the login API (`/api/login`) and the title and the translations of the page (`/api/ui`, `/api/i18n`) can be used without being logged in, because the page has to be displayed to show the login form. The page loads its data after the login, and shows the login form again if the session expires. The routes added by a plugin are protected by the plugin (see `PluginContext.loginManager()`).
+### Choice of the language
+
+The page is displayed in the language of the user: the first of the languages of the browser (the `Accept-Language` header, that is the language of the system) that has a translation of the page (a `sync4j-web/i18n/messages_<language>.properties` file, see [Adding a language](#adding-a-language)), English otherwise. sync4j-web provides English and French.
+
+`GET /api/i18n` gives the chosen language and all its translations (`{"language": "fr", "messages": {...}}`), `?lang=fr` forces a language. It does not need a login, as the login form is translated too.
+
+### Who translates what
+
+The texts of the page come from three places, merged in this order (a place can replace the texts of the previous ones):
+
+| Texts | Translated by | Files |
+|---|---|---|
+| The texts of sync4j-web: the page itself (labels, buttons, statuses, technical log, ...) and the few messages that its Java code sends to the page (the title, a `check` that failed, a plugin interrupted by a restart) | sync4j-web | `sync4j-web/i18n/messages_<language>.properties`, in the jar of sync4j-web |
+| The texts that a plugin sends to the page (its card, the problems found by `check`) | The plugin, see [Translating a plugin](#translating-a-plugin) | The files of the plugin |
+| Anything else the application wants to change, for instance its title (`app.title`) | The application, with `SyncServer.Builder.translations(language -> map)` | Up to the application |
+
+The title set with `SyncServer.Builder.title(...)` is not translated.
+
+### Translation files
+
+A translation file is a UTF-8 `.properties` file named `<base>_<language>.properties` (`en`, `fr`, `es`, ...), read with `Translations.load(classLoader, base, language)`. `{0}`, `{1}`... are replaced by the arguments of the text. There is no other special character: an apostrophe is an apostrophe (unlike `java.text.MessageFormat`).
+
+**The English file is the reference**: it has all the keys, and the other files have the same keys (a test checks it for the files of sync4j-web). It also completes the other languages: a key that is missing in a translation is displayed in English. A key that has no translation at all is displayed as is (so a missing translation is visible).
+
+The English texts of the page are also written in `index.html` and in the scripts (`data-i18n` attributes, `i18n.t(key, englishText, args...)`), where they are used if the translations can't be loaded. A test checks that they are the same as the ones of the English file: when a text of the page changes, change both.
+
+### Adding a language
+
+To translate sync4j-web in Spanish, for instance:
+
+1. Copy [`messages_en.properties`](src/main/resources/sync4j-web/i18n/messages_en.properties) to `messages_es.properties` and translate its texts (keep the keys and the `{0}`, `{1}`...).
+2. Then, either:
+   - add it to sync4j-web, in `src/main/resources/sync4j-web/i18n/` (contributions are welcome), so every application has it;
+   - or put it in the resources of your application, as `sync4j-web/i18n/messages_es.properties`: it is found on the classpath, so the page is available in Spanish without changing sync4j-web.
+3. The plugins are translated by their own files (see below): a plugin that has no Spanish file is displayed in English.
+
+### Translating a plugin
+
+A plugin that is not translated sends simple strings. To translate its texts:
+
+- It sends `Message`s instead of strings: a key and arguments (`Message.of("myplugin.left", 3)`, an argument can be a `Message` too). The page translates them in the language of the user, so the same message (for instance the state saved in the status file) is displayed in French to a French user and in English to an English one.
+- It returns the translations of a language from `SyncPlugin.translations(language)`, usually with `Translations.load(getClass().getClassLoader(), "myplugin/messages", language)`, that reads `myplugin/messages_en.properties`, `myplugin/messages_fr.properties`... **The English file is required**, and the other ones have the same keys (see [Translation files](#translation-files)).
+- The keys are shared by the page and all the plugins: start the ones of a plugin with its id.
+- `Message.format(translations)` gives the text in a language, for what the page does not display: for instance `message.format(translations("en"))` for a log or the message of an exception.
+
+### What is not translated
+
+- The error messages that the server answers to the requests, for instance the refusal of a synchronization by a plugin (`beforeSync`) or the error of a failed synchronization.
+- The names of the libraries.
+
+## Authentication and the secret
+
+When the security is enabled, a user has to log in to use the application: the API of the libraries (`/api/libraries/**`, to read as well as to change something) and the WebSocket refuse the users that are not logged in (HTTP 401, the WebSocket is not even opened). Only the web page and its files, the login API (`/api/login`), the title of the page (`/api/ui`) and its translations (`/api/i18n`) can be used without being logged in, because the page has to be displayed to show the login form. The page loads its data after the login, and shows the login form again if the session expires. The routes added by a plugin are protected by the plugin (see `PluginContext.loginManager()`).
 
 How the login works:
 
@@ -157,31 +284,12 @@ See also `secureCookie` in the configuration: it is about the cookie that carrie
 | POST | `/api/libraries/sync/{id}` | Starts a synchronization. Body: `{"suffixPath": "optional/sub/folder", "useChecksum": false}` |
 | DELETE | `/api/libraries/sync/{id}` | Cancels a synchronization |
 | GET | `/api/ui` | The title of the page: `{"title": "..."}`. Public, as the page and the login API |
-| GET | `/api/i18n` | The language chosen for the user and its translations: `{"language": "fr", "messages": {...}}`. Public too |
-| GET | `/api/libraries/checks/{id}` | The problems found by the plugins in a library: `[{"plugin": "id", "message": {"key": ..., "fallback": "...", "args": [...]}}]` (empty if none, see `Message`) |
+| GET | `/api/i18n` | The language chosen for the user and its translations: `{"language": "fr", "messages": {...}}` (see [Translations](#translations)). Public too |
+| GET | `/api/libraries/checks/{id}` | The problems found by the plugins in a library: `[{"plugin": "id", "message": {"key": "...", "args": [...]}}]` (empty if none, see [Translating a plugin](#translating-a-plugin)) |
 | WS | `/ws/sync/{libraryId}` | `STATUS`, `PROGRESS` and `PLUGIN` messages |
-| POST/GET/DELETE | `/api/login` | Log in (`{"user", "password"}`), check the login (`{"user"}` or 401), log out. The only routes of the API that don't need a login |
+| POST/GET/DELETE | `/api/login` | Log in (`{"user", "password"}`), check the login (`{"user"}` or 401), log out. Public |
 
 All the routes of the table, except `/api/ui`, `/api/i18n` and `/api/login`, need the user to be logged in if the security is enabled (otherwise, they answer 401).
-
-### The web page
-
-- It has a card to start a synchronization, a card with its progress, whose badge (*In progress*, *Done*, *Failed*, *Cancelled*) and colored edge tell the state, and that folds itself when the synchronization succeeds (the user can unfold it), one card per plugin (see above) and a **technical log** card, collapsed by default.
-- The title of the page is `SyncServer.Builder.title(...)` ("Synchronization Dashboard" by default). The page reads it from `/api/ui`, that does not need a login (the login form is displayed with the title).
-- It follows the system theme: dark if the system asks for a dark one (`prefers-color-scheme`).
-- On a phone, a single button is displayed to save some height: *Start Synchronization*, replaced by *Stop Synchronization* while the library is synchronizing.
-- It is translated (see below).
-- To customize the page more, pass a directory to `SyncServer.Builder.staticFiles`: its files replace the default ones.
-
-### Translations
-
-The page is displayed in the language of the user: the first of the languages of the browser (the `Accept-Language` header, that is the language of the system) that has translations, English otherwise. French is provided.
-
-- The English texts are in the page and in the scripts: they are the fallbacks. A translation is a UTF-8 `.properties` file named `sync4j-web/i18n/messages_<language>.properties` (the keys are the ones of `index.html` and of the scripts: `data-i18n` attributes and `i18n.t(key, fallback, args...)`). `{0}`, `{1}`... are replaced by the arguments (there is no other special character: an apostrophe is an apostrophe).
-- `GET /api/i18n` (public, as the login form is translated) gives `{"language": "fr", "messages": {...}}`. `?lang=fr` forces a language.
-- A plugin translates its texts with `Message.of(key, "English text with {0}", args...)` (use `Message.text` for a text that can't be translated) and gives the translations of a language with `SyncPlugin.translations(language)`, for instance `Translations.load(getClass().getClassLoader(), "my-plugin/messages", language)` that reads `my-plugin/messages_fr.properties`. Keys are shared by the page and all the plugins: start the ones of a plugin with its id. `SyncPlugin.check` returns `Message`s too.
-- The application can add (or replace) translations with `SyncServer.Builder.translations(language -> map)`. The key `app.title` is the title of the page, unless `Builder.title(...)` is used.
-- What is not translated: the error messages that the server answers to the requests (for instance a refusal of a plugin in `beforeSync`) and the names of the libraries.
 
 ## Known limitations
 

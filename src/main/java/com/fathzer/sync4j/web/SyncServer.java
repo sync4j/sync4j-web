@@ -385,7 +385,7 @@ public class SyncServer implements AutoCloseable {
                 plugin.check(library).forEach(message -> warnings.add(new LibraryWarning(plugin.id(), message)));
             } catch (IOException | RuntimeException e) {
                 log.warn("Plugin {} can't check the library {}", plugin.id(), library.id(), e);
-                warnings.add(new LibraryWarning(plugin.id(), Message.of("check.failed", "The library can't be checked: {0}", e.getMessage())));
+                warnings.add(new LibraryWarning(plugin.id(), Message.of("check.failed", e.getMessage())));
             }
         }
         return warnings;

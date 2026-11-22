@@ -1,41 +1,46 @@
 package com.fathzer.sync4j.web.plugin;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 /**
- * A text that is displayed to the user and that the web page can translate.
- * <br>The page looks for the translation of the key in its dictionary (see {@link SyncPlugin#translations(String)}). If it has none, it displays the fallback.
- * The fallback and the translations are patterns: <code>{0}</code>, <code>{1}</code>, ... are replaced by the arguments (that can be messages too).
- * There are no other special characters in these patterns (an apostrophe is an apostrophe).
- * <br>A message is sent to the page as <code>{"key":"...","fallback":"...","args":[...]}</code>.
- * @param key the key of the translation (null if the text can't be translated)
- * @param fallback the text (a pattern) displayed if the key has no translation, usually the English one
- * @param args the arguments of the pattern (strings, numbers or messages)
+ * A text that is displayed to the user in his language.
+ * <br>The text is the translation of the key (see {@link SyncPlugin#translations(String)}): a pattern whose <code>{0}</code>, <code>{1}</code>, ... are replaced
+ * by the arguments (that can be messages too). There are no other special characters in these patterns (an apostrophe is an apostrophe).
+ * <br>The translations of a language are completed by the English ones: a key needs at least an English translation. If it has none, the key itself is displayed.
+ * <br>A message is sent to the page as <code>{"key":"...","args":[...]}</code>, and the page translates it. A text that does not need to be translated is a simple string.
+ * @param key the key of the translation
+ * @param args the arguments of the pattern (strings, numbers or messages, null is displayed as <code>null</code>)
  */
-public record Message(String key, String fallback, List<Object> args) {
+public record Message(String key, List<Object> args) {
     /** Constructor. */
     public Message {
-        args = args == null ? List.of() : List.copyOf(args);
+        Objects.requireNonNull(key);
+        // An argument can be null (for instance, the message of an exception)
+        args = args == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(args));
     }
 
     /**
-     * Creates a message that can be translated.
+     * Creates a message.
      * @param key the key of the translation
-     * @param fallback the text (a pattern) displayed if the key has no translation
      * @param args the arguments of the pattern
      * @return a new message
      */
-    public static Message of(String key, String fallback, Object... args) {
-        return new Message(key, fallback, List.of(args));
+    public static Message of(String key, Object... args) {
+        return new Message(key, Arrays.asList(args));
     }
 
     /**
-     * Creates a message that can't be translated.
-     * @param text the text
-     * @return a new message
+     * Gets the text of this message in a language (for instance, the English one for a log).
+     * @param translations the translations of the language (see {@link SyncPlugin#translations(String)})
+     * @return the text. The key is used as pattern if it has no translation.
      */
-    public static Message text(String text) {
-        return new Message(null, text, List.of());
+    public String format(Map<String, String> translations) {
+        return format(translations.getOrDefault(key, key), args.stream().map(arg -> arg instanceof Message message ? message.format(translations) : arg).toList());
     }
 
     /**
@@ -60,11 +65,5 @@ public record Message(String key, String fallback, List<Object> args) {
             }
         }
         return result.toString();
-    }
-
-    /** The text without translation, with the arguments in place (for logs and tests). */
-    @Override
-    public String toString() {
-        return format(fallback == null ? String.valueOf(key) : fallback, args);
     }
 }

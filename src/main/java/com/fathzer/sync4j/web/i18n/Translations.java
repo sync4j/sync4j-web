@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 /**
  * Loads the translations of an application or of a plugin.
  * <br>The translations of a language are in a UTF-8 <code>.properties</code> file named <code>base_language.properties</code> (for instance
- * <code>my-plugin/messages_fr.properties</code>). The English texts are the fallbacks of the messages, so there is no file for English.
+ * <code>my-plugin/messages_fr.properties</code>). The English file is required: the server completes the other languages with it.
  */
 public final class Translations {
     private static final Pattern LANGUAGE = Pattern.compile("[a-z]{2,3}");

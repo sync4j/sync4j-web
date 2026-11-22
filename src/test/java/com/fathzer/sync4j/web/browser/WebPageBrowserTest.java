@@ -106,13 +106,19 @@ class WebPageBrowserTest {
             @Override
             public void afterSync(SyncRequest request, SyncStatus status) {
                 // For instance, a plugin that tells what it does after a synchronization
-                context.publish(request.library().id(), java.util.Map.of("message", Message.of("checker.scan", "Scan requested"), "label", "Checker", "state", "RUNNING",
-                        "details", List.of(Message.of("checker.left", "Thumbnails: {0} left", 3)), "progress", java.util.Map.of("done", 1, "total", 2)));
+                context.publish(request.library().id(), java.util.Map.of("message", Message.of("checker.scan"), "label", "Checker", "state", "RUNNING",
+                        "details", List.of(Message.of("checker.left", 3)), "progress", java.util.Map.of("done", 1, "total", 2)));
             }
 
             @Override
             public java.util.Map<String, String> translations(String language) {
-                return "fr".equals(language) ? java.util.Map.of("checker.scan", "Analyse demandée", "checker.left", "Miniatures : {0} restantes") : java.util.Map.of();
+                return switch (language) {
+                    case "en" -> java.util.Map.of("checker.scan", "Scan requested", "checker.left", "Thumbnails: {0} left", "checker.other", "Something else",
+                            "checker.notReady", "The library is not ready", "checker.again", "Again");
+                    // A translation can be incomplete: the English text is displayed (see checker.other)
+                    case "fr" -> java.util.Map.of("checker.scan", "Analyse demandée", "checker.left", "Miniatures : {0} restantes");
+                    default -> java.util.Map.of();
+                };
             }
 
             @Override
@@ -227,7 +233,7 @@ class WebPageBrowserTest {
 
     @Test
     void testTheWarningsOfThePluginsAreDisplayedAndCanBeChecked() {
-        libraryWarnings.set(List.of(Message.text("The library is not ready"), Message.of("checker.other", "Something else")));
+        libraryWarnings.set(List.of(Message.of("checker.notReady"), Message.of("checker.other")));
         open();
         loginAndWaitForTheLibraries();
         final int mark = browser.mark();
@@ -245,7 +251,7 @@ class WebPageBrowserTest {
         browser.waitFor("!" + visible("libraryWarnings"), "the end of the warnings");
 
         // Another problem, then the user selects no library any more
-        libraryWarnings.set(List.of(Message.text("Again")));
+        libraryWarnings.set(List.of(Message.of("checker.again")));
         selectLibrary("");
         selectLibrary("photos");
         browser.waitFor(visible("libraryWarnings"), "the new warning");
@@ -534,6 +540,24 @@ class WebPageBrowserTest {
         assertEquals("Analyse demandée", browser.text("document.querySelector('#pluginCards .plugin-card-message').textContent"));
         assertEquals(List.of("Miniatures : 3 restantes"), MAPPER.convertValue(browser.evaluate("Array.from(document.querySelectorAll('#pluginCards .plugin-card-details li')).map(e => e.textContent)"), List.class));
         browser.waitFor("document.getElementById('logOutput').textContent.includes('[checker] Analyse demandée')", "the translated message in the log");
+    }
+
+    @Test
+    void testTheSavedCardOfAPluginIsDisplayedInTheNewLanguage() {
+        open();
+        loginAndWaitForTheLibraries();
+        selectTheLibrary();
+        browser.waitFor("document.getElementById('lastSyncTime').textContent !== ''", "the connection to the server");
+        browser.evaluate("document.getElementById('startBtn').click()");
+        browser.waitFor("document.querySelector('#pluginCards .plugin-card-message')?.textContent === 'Scan requested'", "the card of the plugin", SYNCHRONIZATION_TIMEOUT);
+
+        // The user changes the language of the system, and loads the page again
+        browser.setAcceptLanguage("fr-FR,fr,en");
+        browser.navigate(base + "/");
+        browser.waitFor("document.querySelector('#pluginCards .plugin-card') !== null", "the card of the plugin after the page was loaded again", SYNCHRONIZATION_TIMEOUT);
+        assertEquals("fr", browser.text("document.documentElement.lang"));
+        assertEquals("Analyse demandée", browser.text("document.querySelector('#pluginCards .plugin-card-message').textContent"));
+        assertEquals("En cours", browser.text("document.querySelector('#pluginCards .badge').textContent"));
     }
 
     @Test

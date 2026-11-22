@@ -174,7 +174,7 @@ public class SynchronizationManager implements AutoCloseable {
         if ("RUNNING".equals(state.get("state"))) {
             // Nobody monitors the plugin anymore: what it was doing is unknown
             state.put("state", "UNKNOWN");
-            state.put("message", Message.of("plugin.interrupted", "The server was restarted while this was in progress: the result is unknown."));
+            state.put("message", Message.of("plugin.interrupted"));
             state.remove("progress");
         }
         pluginStates.computeIfAbsent(libraryId, k -> new ConcurrentHashMap<>()).put(pluginId, state);
