@@ -24,6 +24,7 @@ It is a reusable component: an application provides a configuration (the *librar
   - [Providers](#providers)
   - [Synchronizations](#synchronizations)
 - [The web page](#the-web-page)
+  - [Installing the page as an application](#installing-the-page-as-an-application)
 - [Plugins](#plugins)
   - [Writing a plugin](#writing-a-plugin)
   - [What a plugin displays in the page](#what-a-plugin-displays-in-the-page)
@@ -128,6 +129,17 @@ The page is served by the server itself (it is in the jar of sync4j-web):
 - On a phone, a single button is displayed to save some height: *Start Synchronization*, replaced by *Stop Synchronization* while the library is synchronizing.
 - It is displayed in the language of the user (see [Translations](#translations)).
 - To customize the page more, pass a directory to `SyncServer.Builder.staticFiles`: its files replace the default ones.
+
+### Installing the page as an application
+
+The page is a Progressive Web App (PWA): the browser can install it as an application (an icon on the home screen or on the desktop, a window of its own).
+
+- The browsers only propose it when the page is served over **https** (or from `localhost`). Over http on a local network, put a reverse proxy with a certificate in front of the server.
+- The application does not need to know its domain (the URLs of its manifest are relative), but each address is a different application for the browser (`https://nas.example.org` and `https://192.168.1.10` are installed separately).
+- The manifest (`/manifest.webmanifest`) is built by the server: the name is the title of the page (see above), the short name, displayed under the icon, is the translation of `app.shortName` (or the title, if `Builder.title(...)` is used).
+- The icons are `icons/icon-192.png`, `icons/icon-512.png`, `icons/icon-maskable-512.png` (whose drawing stays in the inner 80%, as the system can cut the corners) and `icons/apple-touch-icon.png` (180x180, for iOS). To use other ones, put files with the same names in the `staticFiles` directory.
+- A service worker (`sw.js`) caches the files of the page, so the application opens even if the server is not available (but it can't do anything until the server is back: the login form is displayed and the login fails). The API and the WebSocket are never cached.
+- On iOS, the installed application does not share the cookies of Safari: the user has to log in once in the application.
 
 ## Plugins
 
@@ -284,6 +296,7 @@ See also `secureCookie` in the configuration: it is about the cookie that carrie
 | POST | `/api/libraries/sync/{id}` | Starts a synchronization. Body: `{"suffixPath": "optional/sub/folder", "useChecksum": false}` |
 | DELETE | `/api/libraries/sync/{id}` | Cancels a synchronization |
 | GET | `/api/ui` | The title of the page: `{"title": "..."}`. Public, as the page and the login API |
+| GET | `/manifest.webmanifest` | The manifest of the application (see [Installing the page as an application](#installing-the-page-as-an-application)). Public |
 | GET | `/api/i18n` | The language chosen for the user and its translations: `{"language": "fr", "messages": {...}}` (see [Translations](#translations)). Public too |
 | GET | `/api/libraries/checks/{id}` | The problems found by the plugins in a library: `[{"plugin": "id", "message": {"key": "...", "args": [...]}}]` (empty if none, see [Translating a plugin](#translating-a-plugin)) |
 | WS | `/ws/sync/{libraryId}` | `STATUS`, `PROGRESS` and `PLUGIN` messages |

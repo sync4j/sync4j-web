@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fathzer.sync4j.config.ProviderRegistry;
 import com.fathzer.sync4j.web.SyncServer;
@@ -558,6 +559,30 @@ class WebPageBrowserTest {
         assertEquals("fr", browser.text("document.documentElement.lang"));
         assertEquals("Analyse demandée", browser.text("document.querySelector('#pluginCards .plugin-card-message').textContent"));
         assertEquals("En cours", browser.text("document.querySelector('#pluginCards .badge').textContent"));
+    }
+
+    @Test
+    void testThePageCanBeInstalledAsAnApplication() {
+        open();
+        // The service worker controls the page (it is needed to install it on some browsers)
+        browser.waitFor("navigator.serviceWorker.controller !== null", "the service worker");
+        // Chrome says what prevents the installation, if anything
+        final JsonNode errors = browser.send("Page.getInstallabilityErrors").path("installabilityErrors");
+        assertEquals(0, errors.size(), errors.toString());
+        final JsonNode manifest = browser.send("Page.getAppManifest");
+        assertEquals(0, manifest.path("errors").size(), manifest.toString());
+
+        // The files of the page are cached (to start without the server), but not the data, that has to be the current one
+        loginAndWaitForTheLibraries();
+        browser.navigate(base + "/");
+        browser.waitFor("document.getElementById('librarySelect').options.length > 1", "the libraries after the page was loaded again");
+        final List<String> cached = new java.util.ArrayList<>();
+        for (JsonNode cache : browser.send("CacheStorage.requestCacheNames", MAPPER.createObjectNode().put("securityOrigin", base)).path("caches")) {
+            browser.send("CacheStorage.requestEntries", MAPPER.createObjectNode().put("cacheId", cache.get("cacheId").asText()).put("skipCount", 0).put("pageSize", 100))
+                    .path("cacheDataEntries").forEach(entry -> cached.add(entry.get("requestURL").asText()));
+        }
+        assertTrue(cached.contains(base + "/script.js"), cached.toString());
+        assertTrue(cached.stream().noneMatch(url -> url.contains("/api/")), cached.toString());
     }
 
     @Test

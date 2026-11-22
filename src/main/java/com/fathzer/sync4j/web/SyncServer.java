@@ -6,6 +6,7 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -330,6 +331,13 @@ public class SyncServer implements AutoCloseable {
             final String language = language(ctx);
             ctx.json(Map.of("language", language, "messages", i18n.messages(language)));
         });
+        // The page can be installed as an application: its name is the title, in the language of the user
+        routes.get("/manifest.webmanifest", ctx -> {
+            final String language = language(ctx);
+            ctx.json(manifest(language));
+            // After json(), that sets application/json
+            ctx.contentType("application/manifest+json");
+        });
         new LoginRestService(loginManager).registerRoutes(routes, "/api/login");
         new SyncRestService(manager, loginManager, this::check).registerRoutes(routes, "/api/libraries");
         final String wsPath = "/ws/sync/{" + SyncWsService.LIBRARY_ID_PARAM + "}";
@@ -348,6 +356,27 @@ public class SyncServer implements AutoCloseable {
         // The answer depends on the language of the browser
         ctx.header("Vary", "Accept-Language");
         return i18n.language(ctx.queryParam("lang"), ctx.header("Accept-Language"));
+    }
+
+    private Map<String, Object> manifest(String language) {
+        final String name = title(language);
+        // The short name is displayed under the icon of the installed application
+        final String shortName = title != null ? title : i18n.messages(language).getOrDefault("app.shortName", name);
+        final Map<String, Object> manifest = new LinkedHashMap<>();
+        manifest.put("id", "./");
+        manifest.put("name", name);
+        manifest.put("short_name", shortName);
+        manifest.put("lang", language);
+        manifest.put("start_url", "./");
+        manifest.put("scope", "./");
+        manifest.put("display", "standalone");
+        manifest.put("background_color", "#f5f7fa");
+        manifest.put("theme_color", "#f5f7fa");
+        manifest.put("icons", List.of(
+                Map.of("src", "icons/icon-192.png", "sizes", "192x192", "type", "image/png", "purpose", "any"),
+                Map.of("src", "icons/icon-512.png", "sizes", "512x512", "type", "image/png", "purpose", "any"),
+                Map.of("src", "icons/icon-maskable-512.png", "sizes", "512x512", "type", "image/png", "purpose", "maskable")));
+        return manifest;
     }
 
     private String title(String language) {

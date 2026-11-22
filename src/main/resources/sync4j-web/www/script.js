@@ -332,6 +332,11 @@ i18n.ready.then(() => fetch('/api/ui')).then(response => response.ok ? response.
 // The texts of the page are in the language of the user before the components are created
 await i18n.ready;
 
+// The service worker makes the page installable as an application (it needs https, or localhost)
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(error => console.error('Failed to register the service worker:', error));
+}
+
 // The application is created once the page is loaded, but it only loads its data when the user is logged in
 const app = new SynchronizationUI();
 document.addEventListener('auth:login', () => app.start());

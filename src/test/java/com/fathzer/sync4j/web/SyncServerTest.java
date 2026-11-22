@@ -47,6 +47,7 @@ import com.fathzer.sync4j.web.sync.SyncStatus;
  */
 class SyncServerTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final java.time.Duration REQUEST_TIMEOUT = java.time.Duration.ofSeconds(10);
     private static final Authenticator AUTHENTICATOR = (user, password) -> {
         if ("alice".equals(user) && "secret".equals(password)) {
             return "alice";
@@ -199,7 +200,8 @@ class SyncServerTest {
     }
 
     private HttpResponse<String> send(String method, String path, String body, String cookie) throws IOException, InterruptedException {
-        final HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url(path)))
+        // A server that does not answer makes the test fail instead of blocking the build
+        final HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url(path))).timeout(REQUEST_TIMEOUT)
                 .header("Content-Type", "application/json")
                 .method(method, body == null ? BodyPublishers.noBody() : BodyPublishers.ofString(body));
         if (cookie != null) {
@@ -363,6 +365,43 @@ class SyncServerTest {
     }
 
     @Test
+    void testThePageCanBeInstalledAsAnApplication() throws Exception {
+        // The login is enabled: the browser loads the manifest, the icons and the service worker without it
+        server = SyncServer.builder(config(true, "")).authenticator(AUTHENTICATOR).statusFile(tmp.resolve("statuses.json")).build();
+        server.start(0);
+
+        final HttpResponse<String> response = sendWithLanguage("/manifest.webmanifest", "fr");
+        assertEquals(200, response.statusCode());
+        assertEquals("application/manifest+json", response.headers().firstValue("Content-Type").orElse("").split(";")[0]);
+        final JsonNode manifest = MAPPER.readTree(response.body());
+        // The name is the title of the application, in the language of the user
+        assertEquals("Tableau de bord de synchronisation", manifest.get("name").asText());
+        assertEquals("Synchro", manifest.get("short_name").asText());
+        assertEquals("fr", manifest.get("lang").asText());
+        // The URLs are relative: the application does not have to know its domain
+        assertEquals("./", manifest.get("start_url").asText());
+        assertEquals("standalone", manifest.get("display").asText());
+        assertEquals("Sync", MAPPER.readTree(sendWithLanguage("/manifest.webmanifest", "en").body()).get("short_name").asText());
+        for (JsonNode icon : manifest.get("icons")) {
+            final HttpResponse<byte[]> image = client.send(HttpRequest.newBuilder(URI.create(url("/" + icon.get("src").asText()))).build(), HttpResponse.BodyHandlers.ofByteArray());
+            assertEquals(200, image.statusCode(), icon.toString());
+            final java.awt.image.BufferedImage read = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(image.body()));
+            assertEquals(icon.get("sizes").asText(), read.getWidth() + "x" + read.getHeight());
+        }
+        assertEquals(200, send("GET", "/sw.js", null, null).statusCode());
+        assertEquals(200, send("GET", "/icons/apple-touch-icon.png", null, null).statusCode());
+    }
+
+    @Test
+    void testTheNameOfTheApplicationIsTheTitleThatIsSet() throws Exception {
+        server = SyncServer.builder(config(false, "")).statusFile(tmp.resolve("statuses.json")).title("My photos").build();
+        server.start(0);
+        final JsonNode manifest = MAPPER.readTree(sendWithLanguage("/manifest.webmanifest", "fr").body());
+        assertEquals("My photos", manifest.get("name").asText());
+        assertEquals("My photos", manifest.get("short_name").asText());
+    }
+
+    @Test
     void testTheTitleOfThePageIsTranslatedByDefault() throws Exception {
         start(config(false, ""));
         assertEquals("Tableau de bord de synchronisation", MAPPER.readTree(sendWithLanguage("/api/ui", "fr").body()).get("title").asText());
@@ -370,7 +409,7 @@ class SyncServerTest {
     }
 
     private HttpResponse<String> sendWithLanguage(String path, String languages) throws IOException, InterruptedException {
-        return client.send(HttpRequest.newBuilder(URI.create(url(path))).header("Accept-Language", languages).build(), HttpResponse.BodyHandlers.ofString());
+        return client.send(HttpRequest.newBuilder(URI.create(url(path))).timeout(REQUEST_TIMEOUT).header("Accept-Language", languages).build(), HttpResponse.BodyHandlers.ofString());
     }
 
     @Test
