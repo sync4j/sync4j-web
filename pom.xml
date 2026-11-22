@@ -6,7 +6,7 @@
     <version>1.1.0</version>
   </parent>
   <artifactId>sync4j-web</artifactId>
-  <version>0.0.1</version>
+  <version>0.0.2</version>
 
   <name>sync4j-web</name>
   <description>A web server to run and monitor sync4j synchronizations, with plugins</description>
@@ -61,12 +61,12 @@
     <dependency>
       <groupId>com.fathzer</groupId>
       <artifactId>sync4j</artifactId>
-      <version>0.0.2</version>
+      <version>0.0.3</version>
     </dependency>
     <dependency>
       <groupId>com.fathzer</groupId>
       <artifactId>sync4j-config</artifactId>
-      <version>0.0.1</version>
+      <version>0.0.2</version>
     </dependency>
     <dependency>
       <groupId>io.javalin</groupId>

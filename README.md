@@ -55,7 +55,7 @@ Add the dependency to your project (it brings sync4j, [sync4j-config](https://gi
 <dependency>
     <groupId>com.fathzer</groupId>
     <artifactId>sync4j-web</artifactId>
-    <version>0.0.1</version>
+    <version>0.0.2</version>
 </dependency>
 ```
 
@@ -292,7 +292,7 @@ The **secret** is the key that signs the tickets (and checks their signature). O
 
 To generate a secret:
 
-- With the jar of this library, that only needs Java: `java -jar sync4j-web-0.0.1.jar`. It prints `Secret: ` followed by the secret (copy the text that follows `Secret: `).
+- With the jar of this library, that only needs Java: `java -jar sync4j-web-0.0.2.jar`. It prints `Secret: ` followed by the secret (copy the text that follows `Secret: `).
 - With the code: `JwtLoginManager.buildSecret()` (or `SecretGenerator.generate()`). An application can also provide its own command line for that.
 - With another tool: `openssl rand -base64 64 | tr -d '\n'` (`tr` removes the line break that openssl adds in the middle of the text).
 
