@@ -12,6 +12,9 @@ import com.fathzer.sync4j.sync.Statistics;
  * Provides JSON serialization and deserialization for {@link Statistics} class.
  */
 public final class StatisticsSerializer {
+    private static final String SKIPPED_FILES = "skippedFiles";
+    private static final String SKIPPED_FOLDERS = "skippedFolders";
+
     private StatisticsSerializer() {
         // Private constructor to prevent instantiation
     }
@@ -35,8 +38,8 @@ public final class StatisticsSerializer {
             writeCounter(gen, "createdFolders", stats.createdFolders());
             
             // Serialize AtomicLong fields
-            writeIfNotZero(gen, "skippedFiles", stats.skippedFiles().get());
-            writeIfNotZero(gen, "skippedFolders", stats.skippedFolders().get());
+            writeIfNotZero(gen, SKIPPED_FILES, stats.skippedFiles().get());
+            writeIfNotZero(gen, SKIPPED_FOLDERS, stats.skippedFolders().get());
             
             gen.writeEndObject();
         }
@@ -77,11 +80,11 @@ public final class StatisticsSerializer {
             deserializeCounter(node, "createdFolders", stats.createdFolders());
             
             // Deserialize AtomicLong fields
-            if (node.has("skippedFiles")) {
-                stats.skippedFiles().set(node.get("skippedFiles").asLong());
+            if (node.has(SKIPPED_FILES)) {
+                stats.skippedFiles().set(node.get(SKIPPED_FILES).asLong());
             }
-            if (node.has("skippedFolders")) {
-                stats.skippedFolders().set(node.get("skippedFolders").asLong());
+            if (node.has(SKIPPED_FOLDERS)) {
+                stats.skippedFolders().set(node.get(SKIPPED_FOLDERS).asLong());
             }
             
             return stats;

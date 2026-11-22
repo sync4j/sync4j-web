@@ -9,6 +9,8 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    # The tests can't block the runner for hours (a test that blocks fails after 2 minutes, see junit-platform.properties)
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:

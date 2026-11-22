@@ -50,6 +50,7 @@ class WebPageBrowserTest {
     Path tmp;
     private Path destination;
     private SyncServer server;
+    private SyncWebConfig serverConfig;
     private String base;
     private final AtomicReference<List<Message>> libraryWarnings = new AtomicReference<>(List.of());
 
@@ -85,8 +86,16 @@ class WebPageBrowserTest {
                 + "\"source\":{\"provider\":\"local\",\"path\":\"" + source + "\"},\"destination\":{\"provider\":\"local\",\"path\":\"" + destination + "\"}},"
                 + "{\"id\":\"other\",\"label\":\"Other\",\"source\":{\"provider\":\"local\",\"path\":\"" + otherSource + "\"},\"destination\":{\"provider\":\"local\",\"path\":\"" + otherDestination + "\"}}]}}";
         final SyncWebConfig config = ConfigLoader.parse(MAPPER.readTree(json), ProviderRegistry.withDefaults());
+        serverConfig = config;
         // Each test has its own server (and its own origin), so a test does not depend on what the previous one did
-        server = SyncServer.builder(config).authenticator((user, password) -> {
+        server = newServer(config);
+        server.start(0);
+        base = "http://localhost:" + server.port();
+        browser.reset(base);
+    }
+
+    private SyncServer newServer(SyncWebConfig config) throws IOException {
+        return SyncServer.builder(config).authenticator((user, password) -> {
             if ("alice".equals(user) && "secret".equals(password)) {
                 return user;
             }
@@ -127,9 +136,6 @@ class WebPageBrowserTest {
                 return libraryWarnings.get();
             }
         }).statusFile(tmp.resolve("statuses.json")).title("Test dashboard").build();
-        server.start(0);
-        base = "http://localhost:" + server.port();
-        browser.reset(base);
     }
 
     @AfterEach
@@ -389,10 +395,13 @@ class WebPageBrowserTest {
         // The connection is lost although the page did not start the synchronization (for instance, it was loaded while another user was synchronizing)
         browser.evaluate("window.sockets[0].close()");
         browser.waitFor("window.sockets.length === 2 && window.sockets[1].readyState === 1", "the new connection to the server", SYNCHRONIZATION_TIMEOUT);
+        // ... and the page gets the status of the library again
+        browser.waitFor("document.getElementById('lastSyncTime').textContent !== ''", "the status of the library");
+        assertEquals(2, browser.evaluate("window.sockets.length").asInt(), "The page should have reconnected once");
     }
 
     @Test
-    void testTheCardOfAPluginIsDisplayedAgainWhenThePageIsLoaded() throws IOException {
+    void testTheCardOfAPluginIsDisplayedAgainWhenThePageIsLoaded() {
         open();
         loginAndWaitForTheLibraries();
         selectTheLibrary();
@@ -582,7 +591,32 @@ class WebPageBrowserTest {
                     .path("cacheDataEntries").forEach(entry -> cached.add(entry.get("requestURL").asText()));
         }
         assertTrue(cached.contains(base + "/script.js"), cached.toString());
-        assertTrue(cached.stream().noneMatch(url -> url.contains("/api/")), cached.toString());
+        // Only the title and the translations, that are public, are cached (to tell in the language of the user that the server can't be reached)
+        assertTrue(cached.stream().filter(url -> url.contains("/api/")).allMatch(url -> url.endsWith("/api/i18n") || url.endsWith("/api/ui")), cached.toString());
+    }
+
+    @Test
+    void testTheUserIsToldThatTheServerCanNotBeReached() throws IOException {
+        browser.setAcceptLanguage("fr-FR,fr,en");
+        open();
+        browser.waitFor("navigator.serviceWorker.controller !== null", "the service worker");
+        // The page is loaded again, so the service worker has its files (it did not control the first loading)
+        browser.navigate(base + "/");
+        browser.waitFor(visible("login-form"), "the login form");
+
+        // The server stops: the page comes from the cache of the service worker, and says that the server can't be reached
+        final int port = server.port();
+        server.stop();
+        browser.navigate(base + "/");
+        browser.waitFor(visible("server-unreachable"), "the message that the server can't be reached");
+        assertEquals("Le serveur est injoignable. La page se reconnectera dès qu'il sera disponible.", browser.text("document.getElementById('server-unreachable').textContent"));
+        assertFalse(browser.isTrue(visible("login-form")), "The login can't work");
+
+        // The server is back: the page loads again by itself
+        server = newServer(serverConfig);
+        server.start(port);
+        browser.waitFor(visible("login-form"), "the login form when the server is back", SYNCHRONIZATION_TIMEOUT);
+        assertFalse(browser.isTrue(visible("server-unreachable")));
     }
 
     @Test

@@ -3,10 +3,56 @@ class AuthManager {
     // True while the user is logged in. The application is started on 'auth:login' and stopped on 'auth:logout' (see script.js).
     loggedIn = false;
     
+    // How often the page checks if a server that can't be reached is back
+    static RECONNECT_DELAY = 5000;
+
     constructor() {
+        this.createUnreachableMessage();
         this.createLoginForm();
         this.setupPasswordToggle();
         this.setupLogoutButton();
+    }
+
+    // The message displayed instead of the login form when the server can't be reached (the page can be displayed by the service worker without it)
+    createUnreachableMessage() {
+        const message = document.createElement('div');
+        message.id = 'server-unreachable';
+        message.className = 'server-unreachable';
+        message.setAttribute('role', 'alert');
+        message.style.display = 'none';
+        message.textContent = i18n.t('server.unreachable', 'The server can\'t be reached. The page will reconnect as soon as it is available.');
+        document.body.insertBefore(message, document.body.firstChild);
+    }
+
+    // True if a response says that the server is not available (a reverse proxy answers 502, 503 or 504 when the server behind it is stopped)
+    static isUnavailable(response) {
+        return [502, 503, 504].includes(response.status);
+    }
+
+    /** Displays that the server can't be reached, and loads the page again as soon as it answers. */
+    showServerUnreachable() {
+        const loginForm = document.getElementById('login-form');
+        if (loginForm) loginForm.style.display = 'none';
+        const appContent = document.getElementById('app-content');
+        if (appContent) appContent.style.display = 'none';
+        document.getElementById('server-unreachable').style.display = 'block';
+        if (this.reconnectTimer) {
+            return;
+        }
+        const check = async () => {
+            try {
+                const response = await fetch('/api/login', { credentials: 'include' });
+                if (!AuthManager.isUnavailable(response)) {
+                    // The server is back: everything is loaded again (the translations, the session, ...)
+                    clearInterval(this.reconnectTimer);
+                    globalThis.location.reload();
+                }
+            } catch (error) {
+                // Still unreachable
+            }
+        };
+        this.reconnectTimer = setInterval(check, AuthManager.RECONNECT_DELAY);
+        globalThis.addEventListener('online', check);
     }
 
     createLoginForm() {
@@ -190,39 +236,46 @@ class AuthManager {
     }
 
     async initAuth() {
+        let user;
         try {
-            // Vérifier si l'utilisateur est déjà connecté
-            const user = await this.getToken();
-            if (user) {
-                // Le token est valide, on affiche l'application
-                this.onLoginSuccess(user);
-            } else {
-                // Pas de token valide, on affiche le formulaire de connexion
-                this.showLoginForm();
-            }
+            // Is the user already logged in?
+            user = await this.getToken();
         } catch (error) {
-            console.error('Authentication check failed:', error);
+            // The server can't be reached: the login would fail
+            console.error('The server can\'t be reached:', error);
+            this.showServerUnreachable();
+            return;
+        }
+        if (user) {
+            this.onLoginSuccess(user);
+        } else {
             this.showLoginForm();
         }
     }
 
+    /**
+     * Gets the user that is logged in.
+     * @returns the user, null if nobody is logged in
+     * @throws an error if the server can't be reached
+     */
     async getToken() {
-        try {
-            const response = await fetch('/api/login', {
-                method: 'GET',
-                credentials: 'include' // Important to send cookies
-            });
-
-            if (response.ok) {
-                // The server answers {"user": "..."} if the token is valid (and a 401 otherwise)
+        const response = await fetch('/api/login', {
+            method: 'GET',
+            credentials: 'include' // Important to send cookies
+        });
+        if (AuthManager.isUnavailable(response)) {
+            throw new Error('The server is not available: ' + response.status);
+        }
+        if (response.ok) {
+            // The server answers {"user": "..."} if the token is valid (and a 401 otherwise)
+            try {
                 const data = await response.json();
                 return data.user ?? null;
+            } catch (error) {
+                console.error('Token verification failed:', error);
             }
-            return null;
-        } catch (error) {
-            console.error('Token verification failed:', error);
-            return null;
         }
+        return null;
     }
 
     /**
@@ -249,14 +302,25 @@ class AuthManager {
 
     async login(user, password) {
         try {
-            const response = await fetch('/api/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ user, password }),
-                credentials: 'include' // Important for cookies
-            });
+            let response;
+            try {
+                response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ user, password }),
+                    credentials: 'include' // Important for cookies
+                });
+            } catch (error) {
+                // The server can't be reached (the browser only says "Failed to fetch")
+                response = null;
+            }
+            if (response === null || AuthManager.isUnavailable(response)) {
+                // The page waits for the server, and loads again when it is back
+                this.showServerUnreachable();
+                throw new Error(i18n.t('server.unreachable', 'The server can\'t be reached. The page will reconnect as soon as it is available.'));
+            }
 
             if (!response.ok) {
                 let errorMessage = i18n.t('login.failed', 'Login failed');

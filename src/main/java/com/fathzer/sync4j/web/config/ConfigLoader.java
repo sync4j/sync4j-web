@@ -47,7 +47,8 @@ import com.fathzer.sync4j.config.SynchronizationConfig;
  * </p>
  */
 public final class ConfigLoader {
-    private static final Set<String> ROOT_PROPERTIES = new java.util.TreeSet<>(Set.of("secret", "secureCookie", "synchronization", "plugins"));
+    private static final String SECRET = "secret";
+    private static final Set<String> ROOT_PROPERTIES = new java.util.TreeSet<>(Set.of(SECRET, "secureCookie", "synchronization", "plugins"));
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private ConfigLoader() {
@@ -88,8 +89,8 @@ public final class ConfigLoader {
             throw new IOException("Unknown root properties: " + String.join(", ", unknown)
                     + " (the properties of the root are " + String.join(", ", ROOT_PROPERTIES) + ", the configuration of a plugin is in plugins)");
         }
-        final JsonNode secretNode = root.get("secret");
-        final String secret = secretNode == null || secretNode.isNull() ? null : EnvVarSubstitutor.replaceStrict(secretNode.asText(), "secret");
+        final JsonNode secretNode = root.get(SECRET);
+        final String secret = secretNode == null || secretNode.isNull() ? null : EnvVarSubstitutor.replaceStrict(secretNode.asText(), SECRET);
         final JsonNode sync = root.get("synchronization");
         if (sync == null) {
             throw new IOException("Missing synchronization attribute");

@@ -83,6 +83,7 @@ public class SyncServer implements AutoCloseable {
         private Path pluginsDirectory;
         private Path statusFile = Paths.get("syncStatuses.json");
         private Path staticFiles;
+        private String staticResources;
         private String title;
         private Function<String, Map<String, String>> translations = language -> Map.of();
         private final List<SyncPlugin> plugins = new ArrayList<>();
@@ -171,6 +172,18 @@ public class SyncServer implements AutoCloseable {
          */
         public Builder staticFiles(Path staticFiles) {
             this.staticFiles = staticFiles;
+            return this;
+        }
+
+        /**
+         * Sets a folder of the classpath that contains static files that replace the files of the default web page.
+         * <br>It lets an application ship its own files in its jar, for instance its icons (<code>icons/icon-192.png</code>, ...).
+         * The files of {@link #staticFiles(Path)} replace these ones.
+         * @param folder the folder in the classpath (for instance <code>/my-app/www</code>)
+         * @return this
+         */
+        public Builder staticResources(String folder) {
+            this.staticResources = folder;
             return this;
         }
 
@@ -313,6 +326,10 @@ public class SyncServer implements AutoCloseable {
                 // Registered first, so it overrides the default files
                 conf.staticFiles.add(builder.staticFiles.toString(), Location.EXTERNAL);
             }
+            if (builder.staticResources != null) {
+                // ... then the ones of the application, then the default ones
+                conf.staticFiles.add(builder.staticResources, Location.CLASSPATH);
+            }
             conf.staticFiles.add("/sync4j-web/www", Location.CLASSPATH);
             conf.jetty.modifyWebSocketServletFactory(factory -> factory.setIdleTimeout(Duration.ofMinutes(10)));
             try {
@@ -372,11 +389,13 @@ public class SyncServer implements AutoCloseable {
         manifest.put("display", "standalone");
         manifest.put("background_color", "#f5f7fa");
         manifest.put("theme_color", "#f5f7fa");
-        manifest.put("icons", List.of(
-                Map.of("src", "icons/icon-192.png", "sizes", "192x192", "type", "image/png", "purpose", "any"),
-                Map.of("src", "icons/icon-512.png", "sizes", "512x512", "type", "image/png", "purpose", "any"),
-                Map.of("src", "icons/icon-maskable-512.png", "sizes", "512x512", "type", "image/png", "purpose", "maskable")));
+        manifest.put("icons", List.of(icon("icons/icon-192.png", "192x192", "any"), icon("icons/icon-512.png", "512x512", "any"),
+                icon("icons/icon-maskable-512.png", "512x512", "maskable")));
         return manifest;
+    }
+
+    private static Map<String, String> icon(String src, String sizes, String purpose) {
+        return Map.of("src", src, "sizes", sizes, "type", "image/png", "purpose", purpose);
     }
 
     private String title(String language) {
@@ -398,8 +417,9 @@ public class SyncServer implements AutoCloseable {
                 throw new IllegalArgumentException("Plugin " + plugin.id() + " is registered twice");
             }
             plugins.add(plugin);
-            log.info("Initializing plugin {}", plugin.id());
-            plugin.init(new Context(plugin.id(), config.plugins().get(plugin.id()), routes));
+            final String id = plugin.id();
+            log.info("Initializing plugin {}", id);
+            plugin.init(new Context(id, config.plugins().get(id), routes));
         }
         // A section that no plugin uses is probably a mistake (a typo, a plugin that can't be loaded, ...)
         config.plugins().keySet().stream().filter(id -> !ids.contains(id))

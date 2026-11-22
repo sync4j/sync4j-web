@@ -128,7 +128,7 @@ The page is served by the server itself (it is in the jar of sync4j-web):
 - It follows the system theme: dark if the system asks for a dark one (`prefers-color-scheme`).
 - On a phone, a single button is displayed to save some height: *Start Synchronization*, replaced by *Stop Synchronization* while the library is synchronizing.
 - It is displayed in the language of the user (see [Translations](#translations)).
-- To customize the page more, pass a directory to `SyncServer.Builder.staticFiles`: its files replace the default ones.
+- To customize the page more, an application can ship files in its jar and give their folder to `SyncServer.Builder.staticResources("/my-app/www")`: they replace the default files that have the same name (its icons, for instance). The files of the directory given to `SyncServer.Builder.staticFiles` replace both (for an administrator that wants to change something without rebuilding the application).
 
 ### Installing the page as an application
 
@@ -137,8 +137,8 @@ The page is a Progressive Web App (PWA): the browser can install it as an applic
 - The browsers only propose it when the page is served over **https** (or from `localhost`). Over http on a local network, put a reverse proxy with a certificate in front of the server.
 - The application does not need to know its domain (the URLs of its manifest are relative), but each address is a different application for the browser (`https://nas.example.org` and `https://192.168.1.10` are installed separately).
 - The manifest (`/manifest.webmanifest`) is built by the server: the name is the title of the page (see above), the short name, displayed under the icon, is the translation of `app.shortName` (or the title, if `Builder.title(...)` is used).
-- The icons are `icons/icon-192.png`, `icons/icon-512.png`, `icons/icon-maskable-512.png` (whose drawing stays in the inner 80%, as the system can cut the corners) and `icons/apple-touch-icon.png` (180x180, for iOS). To use other ones, put files with the same names in the `staticFiles` directory.
-- A service worker (`sw.js`) caches the files of the page, so the application opens even if the server is not available (but it can't do anything until the server is back: the login form is displayed and the login fails). The API and the WebSocket are never cached.
+- The icons are `icons/icon-192.png`, `icons/icon-512.png`, `icons/icon-maskable-512.png` (whose drawing stays in the inner 80%, as the system can cut the corners) and `icons/apple-touch-icon.png` (180x180, for iOS). To use other ones, put files with the same names in the `staticResources` folder of the application (or in the `staticFiles` directory).
+- A service worker (`sw.js`) caches the files of the page, so the application opens even if the server is not available: it then says that the server can't be reached (in the language of the user: the translations are cached too), and loads again by itself when the server is back. The API (except the title and the translations) and the WebSocket are never cached.
 - On iOS, the installed application does not share the cookies of Safari: the user has to log in once in the application.
 
 ## Plugins

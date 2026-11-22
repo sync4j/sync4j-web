@@ -20,6 +20,10 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <sonar.organization>sync4j</sonar.organization>
+    <!-- The waits of the tests are polling loops with a time limit (Thread.sleep between two checks) -->
+    <sonar.issue.ignore.multicriteria>testSleep</sonar.issue.ignore.multicriteria>
+    <sonar.issue.ignore.multicriteria.testSleep.ruleKey>java:S2925</sonar.issue.ignore.multicriteria.testSleep.ruleKey>
+    <sonar.issue.ignore.multicriteria.testSleep.resourceKey>src/test/java/**/*</sonar.issue.ignore.multicriteria.testSleep.resourceKey>
     <maven.compiler.release>21</maven.compiler.release>
     <maven.compiler.source>21</maven.compiler.source>
     <maven.compiler.target>21</maven.compiler.target>

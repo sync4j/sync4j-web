@@ -27,6 +27,7 @@ import io.jsonwebtoken.security.WeakKeyException;
  */
 public class JwtLoginManager implements LoginManager {
     private static final String JWT_COOKIE_NAME = "auth_token";
+    private static final String MESSAGE = "message";
     private static final Duration JWT_EXPIRATION = Duration.ofDays(7);
 
     private final Logger log = LoggerFactory.getLogger(JwtLoginManager.class);
@@ -103,7 +104,7 @@ public class JwtLoginManager implements LoginManager {
         try {
             final LoginRequest request = ctx.bodyAsClass(LoginRequest.class);
             if (request.user() == null || request.user().isBlank() || request.password() == null) {
-                ctx.status(400).json(Map.of("message", "User and password are required"));
+                ctx.status(400).json(Map.of(MESSAGE, "User and password are required"));
                 return;
             }
             final String user = authenticator.authenticate(request.user(), request.password());
@@ -117,10 +118,10 @@ public class JwtLoginManager implements LoginManager {
             ctx.status(200).result("Authentication successful");
         } catch (AuthenticationFailedException e) {
             log.info("Authentication failed", e);
-            ctx.status(e.getStatusCode()).json(e.getDetails() == null ? Map.of("message", String.valueOf(e.getMessage())) : e.getDetails());
+            ctx.status(e.getStatusCode()).json(e.getDetails() == null ? Map.of(MESSAGE, String.valueOf(e.getMessage())) : e.getDetails());
         } catch (Exception e) {
             log.warn("An error occurred during authentication", e);
-            ctx.status(500).json(Map.of("message", "An error occurred during authentication: " + e.getMessage()));
+            ctx.status(500).json(Map.of(MESSAGE, "An error occurred during authentication: " + e.getMessage()));
         }
     }
 

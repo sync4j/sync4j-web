@@ -651,6 +651,19 @@ header h1 {
     border: 0;
 }
 
+/* Displayed instead of the login form when the server can't be reached */
+.server-unreachable {
+    max-width: 400px;
+    margin: 100px auto;
+    padding: 20px;
+    border-radius: 8px;
+    border-left: 4px solid #f0a000;
+    background-color: var(--warn-bg);
+    color: var(--warn-text);
+    box-shadow: var(--shadow);
+    text-align: center;
+}
+
 /* Responsive design */
 @media (max-width: 600px) {
     .container {

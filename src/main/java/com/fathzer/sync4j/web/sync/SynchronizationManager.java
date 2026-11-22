@@ -54,6 +54,7 @@ public class SynchronizationManager implements AutoCloseable {
 
     /**
      * Receives the progress and the status of the synchronizations.
+     * <br>Its methods are called by the threads of the synchronizations: it has to be thread-safe.
      */
     public interface SyncBroadcaster {
         void broadcast(String libraryId, Statistics progress);
@@ -107,8 +108,9 @@ public class SynchronizationManager implements AutoCloseable {
     private final AtomicInteger threadCount = new AtomicInteger(0);
     private final SynchronizationConfig config;
     private final Path statusFile;
-    private volatile SyncBroadcaster broadcaster;
-    private volatile SyncListener listener = new SyncListener() {};
+    // volatile only makes the change of the reference visible to the other threads: the objects themselves have to be thread-safe (see their Javadoc)
+    private volatile SyncBroadcaster broadcaster; // NOSONAR java:S3077
+    private volatile SyncListener listener = new SyncListener() {}; // NOSONAR java:S3077
     // Lets tests change the parameters of the synchronizations (for instance, to slow them down)
     private Consumer<SyncParameters> parametersCustomizer = p -> {};
 
@@ -191,14 +193,18 @@ public class SynchronizationManager implements AutoCloseable {
             // The file is written then moved, so a reader (or a crash) never sees a partial file
             final Path temp = statusFile.resolveSibling(statusFile.getFileName() + ".tmp");
             MAPPER.writeValue(temp.toFile(), root);
-            try {
-                Files.move(temp, statusFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException e) {
-                Files.move(temp, statusFile, StandardCopyOption.REPLACE_EXISTING);
-            }
+            replace(temp, statusFile);
             log.debug("Successfully saved sync statuses");
         } catch (IOException e) {
             log.error("Failed to save sync statuses", e);
+        }
+    }
+
+    private static void replace(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
@@ -361,7 +367,8 @@ public class SynchronizationManager implements AutoCloseable {
             syncParameters.performance().fastList(true).maxWalkThreads(4).maxComparisonThreads(8).maxCopyThreads(5);
             syncParameters.eventListener(event -> log.debug("event: {} {}", event.action().getClass().getSimpleName(), event.status()));
             parametersCustomizer.accept(syncParameters);
-            final Synchronization synchronization = new Synchronization(sourceEntry, destinationEntry, syncParameters);
+            // The synchronization is closed by Running.close, when it is over
+            final Synchronization synchronization = new Synchronization(sourceEntry, destinationEntry, syncParameters); // NOSONAR java:S2095
             return new Running(request, synchronization, sourceEntry.getFileProvider(), destinationEntry.getFileProvider());
         } catch (IOException | RuntimeException e) {
             sourceEntry.getFileProvider().close();

@@ -246,7 +246,8 @@ class SynchronizationManagerTest {
 
             // The synchronization is registered as soon as it runs
             assertEquals(SyncStatus.Status.SYNCING, manager.getSyncStatus(LIBRARY_ID).status());
-            assertThrows(ConflictException.class, () -> manager.run(request()));
+            final SyncRequest again = request();
+            assertThrows(ConflictException.class, () -> manager.run(again));
             assertFalse(manager.cancel("unknown"));
             assertTrue(manager.cancel(LIBRARY_ID));
         } finally {
@@ -260,7 +261,7 @@ class SynchronizationManagerTest {
     }
 
     @Test
-    void testProvidersAreClosedIfTheSynchronizationCanNotBeBuilt() throws IOException {
+    void testProvidersAreClosedIfTheSynchronizationCanNotBeBuilt() {
         final FolderLocation failingDestination = new FolderLocation(r -> {
             throw new IOException("Destination is not available");
         }, destination.toString());

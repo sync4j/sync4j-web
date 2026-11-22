@@ -39,6 +39,7 @@ public final class SecretGenerator {
      * @param args not used
      */
     public static void main(String[] args) {
-        System.out.println(PREFIX + generate());
+        // The secret is the output of this command line: it is printed, not logged
+        System.out.println(PREFIX + generate()); // NOSONAR java:S106
     }
 }

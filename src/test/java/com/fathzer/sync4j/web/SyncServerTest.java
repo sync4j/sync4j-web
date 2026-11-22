@@ -291,8 +291,9 @@ class SyncServerTest {
         final WebSocket other = client.newWebSocketBuilder().buildAsync(URI.create("ws://localhost:" + server.port() + "/ws/sync/photos"), later).get(5, TimeUnit.SECONDS);
         try {
             assertEquals("COMPLETED", later.await("STATUS").get("data").get("status").asText());
-            Thread.sleep(300);
-            assertTrue(later.messages.stream().noneMatch(m -> "PLUGIN".equals(m.get("type").asText())), "The old state should not be sent: " + later.messages);
+            // Nothing else is sent (the replay of the states of the plugins would come just after the status)
+            final JsonNode next = later.messages.poll(300, TimeUnit.MILLISECONDS);
+            assertTrue(next == null || !"PLUGIN".equals(next.get("type").asText()), "The old state should not be sent: " + next);
         } finally {
             other.sendClose(WebSocket.NORMAL_CLOSURE, "done").get(5, TimeUnit.SECONDS);
         }
@@ -410,6 +411,22 @@ class SyncServerTest {
 
     private HttpResponse<String> sendWithLanguage(String path, String languages) throws IOException, InterruptedException {
         return client.send(HttpRequest.newBuilder(URI.create(url(path))).timeout(REQUEST_TIMEOUT).header("Accept-Language", languages).build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void testTheApplicationCanReplaceFilesOfThePageWithItsResources() throws Exception {
+        // The test resources have a test-www/icons/icon-192.png, as an application can have in its jar
+        final Path custom = Files.createDirectory(tmp.resolve("custom"));
+        Files.writeString(custom.resolve("styles.css"), "/* the administrator's */");
+        server = SyncServer.builder(config(false, "")).statusFile(tmp.resolve("statuses.json")).staticResources("/test-www").staticFiles(custom).build();
+        server.start(0);
+
+        assertEquals("application icon", send("GET", "/icons/icon-192.png", null, null).body());
+        // The other files are the default ones
+        assertEquals(200, send("GET", "/icons/icon-512.png", null, null).statusCode());
+        assertTrue(send("GET", "/index.html", null, null).body().contains("manifest.webmanifest"));
+        // The files of the staticFiles directory replace the ones of the application
+        assertEquals("/* the administrator's */", send("GET", "/styles.css", null, null).body());
     }
 
     @Test
@@ -686,28 +703,33 @@ class SyncServerTest {
     void testInvalidServers() throws Exception {
         final Path statusFile = tmp.resolve("statuses.json");
         // A secret requires an authenticator
-        final IllegalStateException noAuthenticator = assertThrows(IllegalStateException.class, () -> SyncServer.builder(config(true, "")).statusFile(statusFile).build());
+        final SyncServer.Builder noAuthenticatorBuilder = SyncServer.builder(config(true, "")).statusFile(statusFile);
+        final IllegalStateException noAuthenticator = assertThrows(IllegalStateException.class, noAuthenticatorBuilder::build);
         assertTrue(noAuthenticator.getMessage().contains("authenticator"));
 
         // A secret that is not a valid one (a password, for instance) is refused with an explicit message
         final SyncWebConfig passwordAsSecret = ConfigLoader.parse(MAPPER.readTree("{\"secret\":\"my-password\",\"synchronization\":{\"libraries\":[{\"id\":\"photos\"," +
                 "\"source\":{\"provider\":\"local\",\"path\":\"" + source + "\"},\"destination\":{\"provider\":\"local\",\"path\":\"" + destination + "\"}}]}}"), ProviderRegistry.withDefaults());
-        final IllegalArgumentException badSecret = assertThrows(IllegalArgumentException.class, () -> SyncServer.builder(passwordAsSecret).authenticator(AUTHENTICATOR).statusFile(statusFile).build());
+        final SyncServer.Builder badSecretBuilder = SyncServer.builder(passwordAsSecret).authenticator(AUTHENTICATOR).statusFile(statusFile);
+        final IllegalArgumentException badSecret = assertThrows(IllegalArgumentException.class, badSecretBuilder::build);
         assertTrue(badSecret.getMessage().contains("The secret is not valid"), badSecret.getMessage());
 
         // Two plugins with the same id
-        assertThrows(IllegalArgumentException.class, () -> SyncServer.builder(config(false, "")).statusFile(statusFile).plugin(new TestPlugin()).plugin(new TestPlugin()).build());
+        final SyncServer.Builder twice = SyncServer.builder(config(false, "")).statusFile(statusFile).plugin(new TestPlugin()).plugin(new TestPlugin());
+        assertThrows(IllegalArgumentException.class, twice::build);
 
         // A library that can't be opened
         Files.delete(source.resolve("a.txt"));
         Files.delete(source);
-        final IOException unavailable = assertThrows(IOException.class, () -> SyncServer.builder(config(false, "")).statusFile(statusFile).build());
+        final SyncServer.Builder unavailableBuilder = SyncServer.builder(config(false, "")).statusFile(statusFile);
+        final IOException unavailable = assertThrows(IOException.class, unavailableBuilder::build);
         assertTrue(unavailable.getMessage().contains("photos"), unavailable.getMessage());
         // ... unless the check is disabled
         server = SyncServer.builder(config(false, "")).statusFile(statusFile).checkLibraries(false).build();
 
         // No libraries
         final SyncWebConfig empty = ConfigLoader.parse(MAPPER.readTree("{\"synchronization\":{\"libraries\":[]}}"), ProviderRegistry.withDefaults());
-        assertThrows(IllegalArgumentException.class, () -> SyncServer.builder(empty).statusFile(statusFile).build());
+        final SyncServer.Builder emptyBuilder = SyncServer.builder(empty).statusFile(statusFile);
+        assertThrows(IllegalArgumentException.class, emptyBuilder::build);
     }
 }

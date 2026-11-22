@@ -4,6 +4,7 @@ import java.io.IOException;
 
 /**
  * A listener of the synchronizations started by a {@link SynchronizationManager}.
+ * <br>Its methods are called by the threads of the synchronizations and of the requests: it has to be thread-safe.
  */
 public interface SyncListener {
     /**

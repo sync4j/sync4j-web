@@ -149,11 +149,13 @@ class JwtLoginManagerTest {
     @Test
     void testInvalidSecrets() {
         // A password is not base64 text
-        final IllegalArgumentException password = assertThrows(IllegalArgumentException.class, () -> new JwtLoginManager(authenticator(), "my-password", true));
+        final Authenticator authenticator = authenticator();
+        final IllegalArgumentException password = assertThrows(IllegalArgumentException.class, () -> new JwtLoginManager(authenticator, "my-password", true));
         assertTrue(password.getMessage().contains("The secret is not valid"), password.getMessage());
         assertTrue(password.getMessage().contains("password is not a valid secret"), password.getMessage());
         // base64 text is not enough: it should encode enough bytes
-        assertThrows(IllegalArgumentException.class, () -> new JwtLoginManager(authenticator(), java.util.Base64.getEncoder().encodeToString("short".getBytes()), true));
+        final String shortSecret = java.util.Base64.getEncoder().encodeToString("short".getBytes());
+        assertThrows(IllegalArgumentException.class, () -> new JwtLoginManager(authenticator, shortSecret, true));
     }
 
     @Test
