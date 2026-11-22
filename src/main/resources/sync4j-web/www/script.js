@@ -106,7 +106,7 @@ class SynchronizationUI {
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.error || i18n.t('sync.startFailedShort', 'Failed to start sync'));
+            throw new Error(i18n.text(error.error) || i18n.t('sync.startFailedShort', 'Failed to start sync'));
         }
 
         // A short synchronization can be over before the answer to the request is received: its final status should not be replaced
@@ -131,7 +131,7 @@ class SynchronizationUI {
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.error || i18n.t('sync.stopFailedShort', 'Failed to stop sync'));
+                throw new Error(i18n.text(error.error) || i18n.t('sync.stopFailedShort', 'Failed to stop sync'));
             }
 
             // The WebSocket will notify us when the sync is actually cancelled
@@ -157,7 +157,7 @@ class SynchronizationUI {
         const wsUrl = `${protocol}${globalThis.location.host}/ws/sync/${encodeURIComponent(this.currentLibrary)}`;
         
         try {
-            console.log(`Attempting to connect WebSocket for library: ${this.currentLibrary} at ${wsUrl}`);
+            console.debug(`Attempting to connect WebSocket for library: ${this.currentLibrary} at ${wsUrl}`);
             this.websocket = new WebSocket(wsUrl);
             
             this.websocket.onopen = () => this.onWebSocketOpen();
@@ -171,7 +171,7 @@ class SynchronizationUI {
     }
 
     onWebSocketOpen() {
-        console.log(`WebSocket connected for library: ${this.currentLibrary}`);
+        console.debug(`WebSocket connected for library: ${this.currentLibrary}`);
         this.resetReconnectState();
         this.syncProgress.showStatus(i18n.t('sync.connected', 'Connected to sync service'), 'success');
     }
@@ -179,7 +179,6 @@ class SynchronizationUI {
     onWebSocketMessage(event) {
         try {
             const message = JSON.parse(event.data);
-            console.log('Received WebSocket message:', message);
             this.handleWebSocketMessage(message);
         } catch (error) {
             console.error('Error parsing WebSocket message:', error, event.data);
@@ -190,7 +189,7 @@ class SynchronizationUI {
         if (!this.currentLibrary) {
             return;
         }
-        console.log(`WebSocket closed for library: ${this.currentLibrary}`, event);
+        console.debug(`WebSocket closed for library: ${this.currentLibrary}`, event);
         // The server refuses the connection if the user is not logged in: no need to try again, the user has to log in
         // Whatever the page does, it has to know how the library evolves (a synchronization can be started by another user or another tab)
         if (!await this.isSessionValid()) {
@@ -265,7 +264,7 @@ class SynchronizationUI {
         } else if (message.type === 'PLUGIN') {
             this.syncProgress.handlePluginMessage(message.plugin, message.data);
         } else {
-            console.log('Unknown message type:', message);
+            console.warn('Unknown message type:', message);
         }
     }
 

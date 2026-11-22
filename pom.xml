@@ -14,7 +14,7 @@
 
   <scm>
     <url>https://github.com/sync4j/sync4j-web.git</url>
-    <connection>https://github.com/sync4j/sync4j-web.git</connection>
+    <connection>scm:git:https://github.com/sync4j/sync4j-web.git</connection>
   </scm>
 
   <properties>
@@ -44,6 +44,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
+        <version>3.5.0</version>
         <configuration>
           <archive>
             <manifest>
@@ -80,13 +81,13 @@
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
-      <version>2.0.17</version>
+      <version>2.0.20</version>
     </dependency>
     <dependency>
       <!-- The logs of the tests (a library does not choose the logger of the applications) -->
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-simple</artifactId>
-      <version>2.0.17</version>
+      <version>2.0.20</version>
       <scope>test</scope>
     </dependency>
 

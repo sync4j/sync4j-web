@@ -35,6 +35,7 @@ import com.fathzer.sync4j.config.ProviderRegistry;
 import com.fathzer.sync4j.web.config.SyncWebConfig;
 import com.fathzer.sync4j.web.plugin.Message;
 import com.fathzer.sync4j.web.plugin.PluginContext;
+import com.fathzer.sync4j.web.plugin.SyncRefusedException;
 import com.fathzer.sync4j.web.plugin.SyncPlugin;
 import com.fathzer.sync4j.web.security.AuthenticationFailedException;
 import com.fathzer.sync4j.web.security.Authenticator;
@@ -61,6 +62,7 @@ class SyncServerTest {
         private final AtomicBoolean closed = new AtomicBoolean();
         private volatile PluginContext context;
         private volatile String refusal;
+        private volatile IOException beforeSyncFailure;
         private volatile List<Message> warnings = List.of();
         private volatile IOException checkFailure;
 
@@ -105,7 +107,10 @@ class SyncServerTest {
         public void beforeSync(SyncRequest request) throws IOException {
             calls.add("before " + request.library().id());
             if (refusal != null) {
-                throw new IOException(refusal);
+                throw new SyncRefusedException(refusal);
+            }
+            if (beforeSyncFailure != null) {
+                throw beforeSyncFailure;
             }
         }
 
@@ -565,6 +570,32 @@ class SyncServerTest {
     }
 
     @Test
+    void testTheSuffixPathCanNotGoOutOfTheLibrary() throws Exception {
+        final Path outside = Files.createDirectory(tmp.resolve("outside"));
+        Files.writeString(outside.resolve("precious.txt"), "precious");
+        start(config(false, ""));
+
+        for (String suffix : List.of("..", "../outside", "sub/../../outside", "./sub", "sub/.", "sub//other", "..\\\\outside", "sub/ .. /x", " ")) {
+            final HttpResponse<String> response = send("POST", "/api/libraries/sync/photos", MAPPER.writeValueAsString(Map.of("suffixPath", suffix)), null);
+            assertEquals(400, response.statusCode(), suffix + " -> " + response.body());
+        }
+        Thread.sleep(300);
+        assertEquals(List.of("precious.txt"), Files.list(outside).map(p -> p.getFileName().toString()).toList());
+        assertEquals("IDLE", MAPPER.readTree(send("GET", "/api/libraries/sync/photos", null, null).body()).get("status").asText());
+    }
+
+    @Test
+    void testTheSlashesAroundTheSuffixPathAreTolerated() throws Exception {
+        Files.createDirectories(source.resolve("sub/folder"));
+        Files.writeString(source.resolve("sub/folder/b.txt"), "b");
+        start(config(false, ""));
+
+        assertEquals(202, send("POST", "/api/libraries/sync/photos", "{\"suffixPath\":\" /sub/folder/ \"}", null).statusCode());
+        assertEquals("COMPLETED", awaitStatusEnd(null).get("status").asText());
+        assertEquals("b", Files.readString(destination.resolve("sub/folder/b.txt")));
+    }
+
+    @Test
     void testPluginHooksAndMessages() throws Exception {
         start(config(false, ""));
         final MessageCollector collector = new MessageCollector();
@@ -593,10 +624,35 @@ class SyncServerTest {
 
         final HttpResponse<String> response = send("POST", "/api/libraries/sync/photos", "{}", null);
 
-        assertEquals(400, response.statusCode());
-        assertTrue(MAPPER.readTree(response.body()).get("error").asText().contains("The photo server is not available"));
+        // The user is told why
+        assertEquals(409, response.statusCode());
+        assertEquals("The photo server is not available", MAPPER.readTree(response.body()).get("error").asText());
         assertEquals(List.of("before photos"), plugin.calls);
         assertFalse(Files.exists(destination.resolve("a.txt")));
+    }
+
+    @Test
+    void testTheErrorsOfTheServerAreNotSentToTheUser() throws Exception {
+        start(config(false, ""));
+        // For instance a provider that can't open its folder: the message has a path of the server
+        plugin.beforeSyncFailure = new IOException("Can't open /srv/private/photos");
+
+        final HttpResponse<String> response = send("POST", "/api/libraries/sync/photos", "{}", null);
+
+        assertEquals(500, response.statusCode());
+        assertFalse(response.body().contains("/srv/private"), response.body());
+        // The user receives a reference, that is in the log with the error
+        final JsonNode error = MAPPER.readTree(response.body()).get("error");
+        assertEquals("error.server", error.get("key").asText());
+        assertTrue(error.get("args").get(0).asText().matches("[0-9a-f]{6}"), error.toString());
+    }
+
+    @Test
+    void testTheErrorsOfTheRequestsCanBeTranslated() throws Exception {
+        start(config(false, ""));
+        assertEquals("library.notFound", MAPPER.readTree(send("POST", "/api/libraries/sync/unknown", "{}", null).body()).get("error").get("key").asText());
+        assertEquals("sync.invalidSuffix", MAPPER.readTree(send("POST", "/api/libraries/sync/photos", "{\"suffixPath\":\"..\"}", null).body()).get("error").get("key").asText());
+        assertEquals("sync.notRunning", MAPPER.readTree(send("DELETE", "/api/libraries/sync/photos", null, null).body()).get("error").get("key").asText());
     }
 
     @Test

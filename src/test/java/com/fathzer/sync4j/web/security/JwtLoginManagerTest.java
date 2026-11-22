@@ -69,6 +69,82 @@ class JwtLoginManagerTest {
         return header.substring(0, header.indexOf(';'));
     }
 
+    /** A clock that the test moves forward. */
+    private static class TestClock extends java.time.Clock {
+        private java.time.Instant now = java.time.Instant.parse("2026-01-01T00:00:00Z");
+
+        void advance(java.time.Duration duration) {
+            now = now.plus(duration);
+        }
+
+        @Override
+        public java.time.ZoneId getZone() {
+            return java.time.ZoneOffset.UTC;
+        }
+
+        @Override
+        public java.time.Clock withZone(java.time.ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public java.time.Instant instant() {
+            return now;
+        }
+    }
+
+    @Test
+    void testTheAttemptsToGuessAPasswordAreSlowedDown() throws Exception {
+        final TestClock clock = new TestClock();
+        start(new JwtLoginManager(authenticator(), JwtLoginManager.buildSecret(), true, clock));
+        final String wrong = "{\"user\":\"alice\",\"password\":\"wrong\"}";
+        final String right = "{\"user\":\"alice\",\"password\":\"secret\"}";
+
+        // A few mistakes are allowed
+        for (int i = 0; i < LoginThrottle.FREE_ATTEMPTS - 1; i++) {
+            assertEquals(401, send("POST", wrong, null).statusCode());
+        }
+        assertEquals(401, send("POST", wrong, null).statusCode());
+        // Then the user has to wait, even with the right password (the authenticator is not called)
+        HttpResponse<String> response = send("POST", right, null);
+        assertEquals(429, response.statusCode());
+        assertEquals("1", response.headers().firstValue("Retry-After").orElse(null));
+        assertEquals(1, MAPPER.readTree(response.body()).get("retryAfter").asInt());
+        // The name is not case sensitive
+        assertEquals(429, send("POST", "{\"user\":\" Alice \",\"password\":\"wrong\"}", null).statusCode());
+
+        // The delay doubles at each failure
+        clock.advance(java.time.Duration.ofSeconds(1));
+        assertEquals(401, send("POST", wrong, null).statusCode());
+        assertEquals("2", send("POST", right, null).headers().firstValue("Retry-After").orElse(null));
+
+        // The other users are not concerned
+        assertEquals(401, send("POST", "{\"user\":\"bob\",\"password\":\"wrong\"}", null).statusCode());
+
+        // Once the delay is over, the right password works, and the failures are forgotten
+        clock.advance(java.time.Duration.ofSeconds(2));
+        assertEquals(200, send("POST", right, null).statusCode());
+        assertEquals(401, send("POST", wrong, null).statusCode());
+        assertEquals(200, send("POST", right, null).statusCode());
+    }
+
+    @Test
+    void testTheDelays() {
+        assertEquals(java.time.Duration.ZERO, LoginThrottle.delay(LoginThrottle.FREE_ATTEMPTS - 1));
+        assertEquals(java.time.Duration.ofSeconds(1), LoginThrottle.delay(LoginThrottle.FREE_ATTEMPTS));
+        assertEquals(java.time.Duration.ofSeconds(4), LoginThrottle.delay(LoginThrottle.FREE_ATTEMPTS + 2));
+        assertEquals(LoginThrottle.MAX_DELAY, LoginThrottle.delay(1000));
+    }
+
+    @Test
+    void testAnUnavailableServiceIsNotAFailedAttempt() throws Exception {
+        final TestClock clock = new TestClock();
+        start(new JwtLoginManager(authenticator(), JwtLoginManager.buildSecret(), true, clock));
+        for (int i = 0; i < LoginThrottle.FREE_ATTEMPTS + 2; i++) {
+            assertEquals(500, send("POST", "{\"user\":\"broken\",\"password\":\"x\"}", null).statusCode());
+        }
+    }
+
     @Test
     void testLoginLifecycle() throws Exception {
         start(new JwtLoginManager(authenticator(), JwtLoginManager.buildSecret(), true));

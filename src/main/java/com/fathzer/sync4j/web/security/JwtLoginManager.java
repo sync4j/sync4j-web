@@ -1,5 +1,6 @@
 package com.fathzer.sync4j.web.security;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
@@ -34,6 +35,7 @@ public class JwtLoginManager implements LoginManager {
     private final Authenticator authenticator;
     private final SecretKey secret;
     private final boolean secureCookie;
+    private final LoginThrottle throttle;
 
     private record LoginRequest(@JsonAlias("email") String user, String password) {}
 
@@ -46,6 +48,12 @@ public class JwtLoginManager implements LoginManager {
      * It should be false only if the server is not served over https.
      */
     public JwtLoginManager(Authenticator authenticator, String secret, boolean secureCookie) {
+        this(authenticator, secret, secureCookie, Clock.systemUTC());
+    }
+
+    // The clock lets the tests check the delays of the logins
+    JwtLoginManager(Authenticator authenticator, String secret, boolean secureCookie, Clock clock) {
+        this.throttle = new LoginThrottle(clock);
         this.secret = secret == null || secret.isBlank() ? null : toKey(secret);
         if (this.secret != null) {
             Objects.requireNonNull(authenticator, "An authenticator is required if the security is enabled");
@@ -107,7 +115,24 @@ public class JwtLoginManager implements LoginManager {
                 ctx.status(400).json(Map.of(MESSAGE, "User and password are required"));
                 return;
             }
-            final String user = authenticator.authenticate(request.user(), request.password());
+            // A user that failed to log in several times has to wait (it slows down the attempts to guess a password)
+            final Duration wait = throttle.remaining(request.user());
+            if (!wait.isZero()) {
+                final long seconds = (wait.toMillis() + 999) / 1000;
+                ctx.header("Retry-After", Long.toString(seconds));
+                ctx.status(429).json(Map.of(MESSAGE, "Too many failed attempts, try again in " + seconds + " s", "retryAfter", seconds));
+                return;
+            }
+            final String user;
+            try {
+                user = authenticator.authenticate(request.user(), request.password());
+            } catch (AuthenticationFailedException e) {
+                if (e.getStatusCode() == 401 || e.getStatusCode() == 403) {
+                    throttle.failed(request.user());
+                }
+                throw e;
+            }
+            throttle.succeeded(request.user());
             final String token = Jwts.builder()
                 .subject(user)
                 .issuedAt(Date.from(Instant.now()))

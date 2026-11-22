@@ -197,6 +197,20 @@ class WebPageBrowserTest {
     }
 
     @Test
+    void testTheUserIsToldToWaitAfterSeveralFailedLogins() {
+        open();
+        // After a few failures, the attempts are refused for a while (the loop does not depend on the speed of the machine: a delay can be over before the next attempt)
+        String error = "";
+        for (int i = 0; i < 10 && !error.startsWith("Too many"); i++) {
+            browser.evaluate("document.getElementById('login-error').textContent = ''");
+            login("alice", "wrong");
+            browser.waitFor("document.getElementById('login-error').textContent.length > 0", "the error message");
+            error = browser.text("document.getElementById('login-error').textContent");
+        }
+        assertTrue(error.matches("Too many failed attempts, try again in \\d+ s"), error);
+    }
+
+    @Test
     void testLoginLoadsTheLibraries() {
         open();
         final int mark = browser.mark();

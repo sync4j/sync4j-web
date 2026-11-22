@@ -25,6 +25,7 @@ It is a reusable component: an application provides a configuration (the *librar
   - [Synchronizations](#synchronizations)
 - [The web page](#the-web-page)
   - [Installing the page as an application](#installing-the-page-as-an-application)
+  - [Deployment behind a reverse proxy](#deployment-behind-a-reverse-proxy)
 - [Plugins](#plugins)
   - [Writing a plugin](#writing-a-plugin)
   - [What a plugin displays in the page](#what-a-plugin-displays-in-the-page)
@@ -134,12 +135,19 @@ The page is served by the server itself (it is in the jar of sync4j-web):
 
 The page is a Progressive Web App (PWA): the browser can install it as an application (an icon on the home screen or on the desktop, a window of its own).
 
-- The browsers only propose it when the page is served over **https** (or from `localhost`). Over http on a local network, put a reverse proxy with a certificate in front of the server.
+- The browsers only propose it when the page is served over **https**, with a certificate they trust (or from `localhost`). See [Deployment behind a reverse proxy](#deployment-behind-a-reverse-proxy).
 - The application does not need to know its domain (the URLs of its manifest are relative), but each address is a different application for the browser (`https://nas.example.org` and `https://192.168.1.10` are installed separately).
 - The manifest (`/manifest.webmanifest`) is built by the server: the name is the title of the page (see above), the short name, displayed under the icon, is the translation of `app.shortName` (or the title, if `Builder.title(...)` is used).
 - The icons are `icons/icon-192.png`, `icons/icon-512.png`, `icons/icon-maskable-512.png` (whose drawing stays in the inner 80%, as the system can cut the corners) and `icons/apple-touch-icon.png` (180x180, for iOS). To use other ones, put files with the same names in the `staticResources` folder of the application (or in the `staticFiles` directory).
 - A service worker (`sw.js`) caches the files of the page, so the application opens even if the server is not available: it then says that the server can't be reached (in the language of the user: the translations are cached too), and loads again by itself when the server is back. The API (except the title and the translations) and the WebSocket are never cached.
 - On iOS, the installed application does not share the cookies of Safari: the user has to log in once in the application.
+
+### Deployment behind a reverse proxy
+
+The server speaks http. To serve the page over https (needed to install it as an application, and recommended as soon as others can reach it, because of the login), put a reverse proxy with a certificate trusted by the devices in front of it. The proxy has to:
+
+- serve the page at the root of an address (`https://sync.example.org/`, not in a sub-path): the page calls `/api/...` and `/ws/...`,
+- forward the WebSockets (`/ws/...`).
 
 ## Plugins
 
@@ -165,7 +173,8 @@ public class MyPlugin implements SyncPlugin {
     }
 
     public void beforeSync(SyncRequest request) throws IOException {
-        // Throw an IOException to refuse the synchronization (the message is sent to the user)
+        // Throw a SyncRefusedException to refuse the synchronization: its message (a Message or a string) is sent to the user.
+        // Any other exception is an error of the server: it is logged, and the user only receives a reference to it.
     }
 
     public void afterSync(SyncRequest request, SyncStatus status) {
@@ -258,7 +267,8 @@ A plugin that is not translated sends simple strings. To translate its texts:
 
 ### What is not translated
 
-- The error messages that the server answers to the requests, for instance the refusal of a synchronization by a plugin (`beforeSync`) or the error of a failed synchronization.
+- The error of a failed synchronization (the `errorMessage` of its status).
+- A refusal of a synchronization by a plugin (`SyncRefusedException`) with a string instead of a `Message`.
 - The names of the libraries.
 
 ## Authentication and the secret
@@ -270,6 +280,8 @@ How the login works:
 1. The user types a name and a password in the web page. The server gives them to the `Authenticator` of the application, that decides if they are valid. It can delegate to any service (a photo server, an LDAP, ...): it returns the identifier of the user, or throws an `AuthenticationFailedException` to reject the credentials (the HTTP status and the body of the answer are sent to the client).
 2. If they are valid, the server builds a small *ticket* that says "this is *user*, valid for 7 days". The ticket is signed, so it can't be modified: it is a [JWT](https://jwt.io/) (JSON Web Token). The server sends it to the browser in a cookie.
 3. The browser sends the cookie back with every request. The server only has to check the signature of the ticket to know who is calling: it does not ask the password again, and it does not store anything about the session.
+
+**Attempts to guess a password are slowed down**: after 3 failed logins of a user (an `AuthenticationFailedException` with the status 401 or 403), the next ones are refused for 1 second, then 2, 4, ... up to 5 minutes (HTTP 429, with a `Retry-After` header), without calling the `Authenticator`. A successful login, or an hour without failure, forgets the failures. They are counted by user name (case insensitive), not by address, because behind a reverse proxy all the requests come from the address of the proxy: someone who knows the name of a user can delay his logins, but not for more than 5 minutes at a time.
 
 The **secret** is the key that signs the tickets (and checks their signature). Only the server knows it, so nobody else can build a valid ticket. It means that:
 
@@ -304,9 +316,12 @@ See also `secureCookie` in the configuration: it is about the cookie that carrie
 
 All the routes of the table, except `/api/ui`, `/api/i18n` and `/api/login`, need the user to be logged in if the security is enabled (otherwise, they answer 401).
 
+When a request fails, the answer is `{"error": ...}`, where the error is a `Message` (`{"key": "...", "args": [...]}`, translated by the page) or a string. An unexpected error of the server (500) does not give its details, that can reveal the paths of the server for instance: the user receives a reference (`error.server`, with 6 hexadecimal digits), and the log of the server has the same reference with the error.
+
 ## Known limitations
 
 - The tests of the web page need a browser, see below: they are skipped if it is not available.
+- The page has to be served at the root of an address, not in a sub-path (see [Deployment behind a reverse proxy](#deployment-behind-a-reverse-proxy)).
 
 ## Running the tests
 

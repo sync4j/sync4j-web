@@ -66,7 +66,7 @@ class ProgressBlock {
         const now = Date.now();
         let result;
         if (done < this.lastDone) {
-            console.log("reset was not called, strange!");
+            // The counter went back (a new synchronization whose progress was not reset): no speed for this time
             result = 0;
         } else {
             const timeDiff = now - this.lastUpdate;

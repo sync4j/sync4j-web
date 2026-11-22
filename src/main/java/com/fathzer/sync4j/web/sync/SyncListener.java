@@ -11,7 +11,8 @@ public interface SyncListener {
      * Called before a synchronization starts.
      * <br>It is called by the thread that requests the synchronization and should return quickly.
      * @param request the request
-     * @throws IOException to refuse the synchronization. The exception message is sent to the user.
+     * @throws IOException to refuse the synchronization. Throw a {@link com.fathzer.sync4j.web.plugin.SyncRefusedException} to tell the user why (its message is sent to him).
+     * Any other exception is an error of the server: it is logged, and the user only receives a reference to find it in the log (its message can have details that the users should not see, the paths of the server for instance).
      */
     default void beforeSync(SyncRequest request) throws IOException {
         // Does nothing by default

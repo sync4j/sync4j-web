@@ -322,6 +322,11 @@ class AuthManager {
                 throw new Error(i18n.t('server.unreachable', 'The server can\'t be reached. The page will reconnect as soon as it is available.'));
             }
 
+            if (response.status === 429) {
+                // Too many failed attempts: the server says how long to wait
+                const data = await response.json().catch(() => ({}));
+                throw new Error(i18n.t('login.tooManyAttempts', 'Too many failed attempts, try again in {0} s', data.retryAfter ?? response.headers.get('Retry-After') ?? '?'));
+            }
             if (!response.ok) {
                 let errorMessage = i18n.t('login.failed', 'Login failed');
                 const errorData = await response.json();
