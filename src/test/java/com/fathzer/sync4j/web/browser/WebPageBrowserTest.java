@@ -367,6 +367,29 @@ class WebPageBrowserTest {
     }
 
     @Test
+    void testTheHeaderOfTheCardOfTheSynchronizationKeepsTheBadgeAtTheTopRight() {
+        open();
+        loginAndWaitForTheLibraries();
+        selectTheLibrary();
+        browser.waitFor("document.getElementById('lastSyncTime').textContent !== ''", "the connection to the server");
+        browser.evaluate("document.getElementById('startBtn').click()");
+        browser.waitFor("document.getElementById('progressBadge').textContent === 'Done'", "the end of the synchronization", SYNCHRONIZATION_TIMEOUT);
+
+        // The button that folds the card is at the left of the title, and the badge at its right
+        final String rects = "const header = document.querySelector('.progress-header').getBoundingClientRect();"
+                + "const button = document.getElementById('toggleProgressSection').getBoundingClientRect();"
+                + "const title = document.querySelector('.progress-header h2').getBoundingClientRect();"
+                + "const badge = document.getElementById('progressBadge').getBoundingClientRect();"
+                + "const line = parseFloat(getComputedStyle(document.querySelector('.progress-header h2')).lineHeight);";
+        assertTrue(browser.isTrue("(() => {" + rects + "return button.right <= title.left && title.right <= badge.left && badge.right <= header.right;})()"));
+        assertTrue(browser.isTrue("(() => {" + rects + "return Math.abs((badge.top + badge.bottom) / 2 - (title.top + line / 2)) < 1;})()"), "The badge should be centered on the title");
+
+        // If the title lacks room, it goes on several lines and the badge stays at the top right
+        browser.evaluate("document.querySelector('.progress-header h2').textContent = 'A very long title '.repeat(30)");
+        assertTrue(browser.isTrue("(() => {" + rects + "return title.height > 2 * line && title.right <= badge.left && badge.right <= header.right && badge.bottom < title.top + line;})()"));
+    }
+
+    @Test
     void testTheCardOfTheSynchronizationIsDisplayedAgainWhenThePageIsLoaded() {
         open();
         loginAndWaitForTheLibraries();
