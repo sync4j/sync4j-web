@@ -346,6 +346,29 @@ class WebPageBrowserTest {
     }
 
     @Test
+    void testASynchronizationThatThePageDidNotAskForClearsWhatTheLastOneLeft() {
+        open();
+        loginAndWaitForTheLibraries();
+        selectTheLibrary();
+        browser.waitFor("document.getElementById('lastSyncTime').textContent !== ''", "the connection to the server");
+        browser.evaluate("document.getElementById('startBtn').click()");
+        browser.waitFor("document.querySelector('#pluginCards .plugin-card') !== null && document.getElementById('progressBadge').textContent === 'Done'", "the end of the first synchronization", SYNCHRONIZATION_TIMEOUT);
+
+        // What the first synchronization left is marked, to know if it is still there after the next one
+        browser.evaluate("document.querySelector('#pluginCards .plugin-card').dataset.previous = 'yes';"
+                + "const previousLog = document.createElement('div'); previousLog.id = 'previousLog'; document.getElementById('logOutput').appendChild(previousLog);");
+
+        // Another page starts a synchronization: this one did not ask for it, it only receives what the server tells
+        browser.evaluate("(() => { fetch('/api/libraries/sync/photos', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}); return null; })()");
+
+        // The page behaves as when it asks for the synchronization itself: the card of the plugin is the one of the new synchronization, not the old one
+        browser.waitFor("(() => { const card = document.querySelector('#pluginCards .plugin-card'); return card !== null && card.dataset.previous === undefined; })()", "the card of the second synchronization", SYNCHRONIZATION_TIMEOUT);
+        assertEquals("Checker", browser.text("document.querySelector('#pluginCards .plugin-card h2').textContent"));
+        assertEquals(1, MAPPER.convertValue(browser.evaluate("document.querySelectorAll('#pluginCards .plugin-card').length"), Integer.class));
+        assertFalse(browser.isTrue("document.getElementById('previousLog') !== null"), "The log of the previous synchronization should be cleared");
+    }
+
+    @Test
     void testTheCardOfTheSynchronizationShowsItsStateAndFoldsWhenItSucceeded() {
         open();
         loginAndWaitForTheLibraries();

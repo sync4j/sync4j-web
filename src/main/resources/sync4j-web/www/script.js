@@ -86,25 +86,32 @@ class SynchronizationUI {
             return;
         }
 
-        this.syncProgress.showProgressSection();
+        this.syncProgress.startRequested();
         this.syncProgress.showStatus(i18n.t('sync.starting', 'Starting sync...'), 'info');
         this.syncProgress.addLog(i18n.t('log.connecting', 'Connecting to sync service...'));
         this.syncProgress.addLog(this.syncForm.useChecksum.checked ? i18n.t('log.checksumOn', 'Checksum verification: enabled') : i18n.t('log.checksumOff', 'Checksum verification: disabled'));
 
         // Then start the sync
         this.lastStatus = null;
-        const response = await authenticatedFetch(`/api/libraries/sync/${encodeURIComponent(this.currentLibrary)}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                ...(this.syncForm.suffixPath.value.trim() && { suffixPath: this.syncForm.suffixPath.value }),
-                useChecksum: this.syncForm.useChecksum.checked
-            })
-        });
+        let response;
+        try {
+            response = await authenticatedFetch(`/api/libraries/sync/${encodeURIComponent(this.currentLibrary)}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    ...(this.syncForm.suffixPath.value.trim() && { suffixPath: this.syncForm.suffixPath.value }),
+                    useChecksum: this.syncForm.useChecksum.checked
+                })
+            });
+        } catch (error) {
+            this.syncProgress.startFailed();
+            throw error;
+        }
 
         if (!response.ok) {
+            this.syncProgress.startFailed();
             const error = await response.json();
             throw new Error(i18n.text(error.error) || i18n.t('sync.startFailedShort', 'Failed to start sync'));
         }
@@ -276,10 +283,6 @@ class SynchronizationUI {
         this.lastStatus = status;
         this.syncForm.updateLibraryStatus(status);
         this.syncProgress.updateLibraryStatus(status);
-    }
-
-    showProgressSection() {
-        this.syncProgress.showProgressSection();
     }
 
     resetProgress() {

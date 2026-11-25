@@ -269,10 +269,37 @@ export class SyncProgress {
             this.progressSection.classList.add(`state-${state.css}`);
         }
         // Only when the state changes, so a card that the user unfolded is not folded again by the next status
-        if (status !== this.shownStatus && (status === 'COMPLETED' || status === 'SYNCING')) {
-            this.setCollapsed(status === 'COMPLETED');
+        if (status !== this.shownStatus) {
+            if (status === 'SYNCING') {
+                // Another page asked for this synchronization (or this page was loaded while it runs): the page does what it does when it asks itself
+                this.beginSynchronization();
+            } else if (status === 'COMPLETED') {
+                this.setCollapsed(true);
+            }
         }
         this.shownStatus = status;
+    }
+
+    // A synchronization begins: the card is displayed, unfolded, and what remains of the previous synchronization (the cards and the log of the plugins,
+    // the status message) is removed. It does not change the progress (the status that begins the synchronization sent the statistics).
+    beginSynchronization() {
+        this.progressSection.style.display = 'block';
+        this.clearPluginData();
+        this.resetStatusIndicators();
+        this.setCollapsed(false);
+    }
+
+    // The user of this page asked for a synchronization: it is displayed at once, without waiting for the status of the server
+    startRequested() {
+        this.resetProgress();
+        this.beginSynchronization();
+        // The status of the server that tells the synchronization runs does not begin it a second time
+        this.shownStatus = 'SYNCING';
+    }
+
+    // The request of the synchronization failed (the status of the server will not come): the next synchronization is a new one
+    startFailed() {
+        this.shownStatus = null;
     }
 
     setCollapsed(collapsed) {
@@ -319,12 +346,6 @@ export class SyncProgress {
         if (data.state || data.progress || data.details) {
             this.pluginCards.update(pluginId, data);
         }
-    }
-
-    showProgressSection() {
-        this.progressSection.style.display = 'block';
-        this.resetProgress();
-        this.setCollapsed(false);
     }
 
     hideProgressSection() {
