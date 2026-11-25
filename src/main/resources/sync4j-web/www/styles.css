@@ -308,22 +308,37 @@ header h1 {
     overflow: hidden;
 }
 
-.progress-header {
+/* The header of the cards (synchronization, technical log and plugins): the fold button (if any), the title and the state badge.
+   The title takes the room that is left and goes on several lines if it lacks room, the badge stays at the top right,
+   centered on the first line of the title. */
+.progress-header,
+.plugin-card-header {
+    --title-line: 1.8rem;
+    --badge-height: 1.4rem;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    gap: 8px 12px;
+}
+
+.progress-header {
     padding: 20px 20px 0;
 }
 
-.progress-header h2 {
+.progress-header h2,
+.plugin-card-header h2 {
+    flex: 1 1 0;
+    min-width: 0;
     margin: 0;
+    font-size: 1.2rem;
+    font-weight: 400;
+    line-height: var(--title-line);
+    overflow-wrap: anywhere;
+    color: var(--heading);
 }
 
-.header-title {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px 12px;
+.progress-header .toggle-button {
+    flex: 0 0 auto;
+    height: var(--title-line);
 }
 
 .toggle-button {
@@ -375,10 +390,8 @@ header h1 {
     font-weight: 600;
 }
 
-.progress-section h2 {
-    color: var(--heading);
-    margin-bottom: 20px;
-    font-weight: 400;
+.progress-section .progress-header {
+    padding-bottom: 20px;
 }
 
 .progress-bar-container {
@@ -568,23 +581,14 @@ header h1 {
 }
 
 .plugin-card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
     margin-bottom: 10px;
-}
-
-.plugin-card-header h2 {
-    margin: 0;
-    font-size: 1.2rem;
-    font-weight: 400;
-    color: var(--heading);
 }
 
 .badge {
     flex: 0 0 auto;
-    padding: 3px 12px;
+    padding: 0 12px;
+    margin-top: calc((var(--title-line) - var(--badge-height)) / 2);
+    line-height: var(--badge-height);
     border-radius: 12px;
     font-size: 0.8rem;
     font-weight: 600;
